@@ -153,9 +153,55 @@ function renderResultStats() {
   `;
 }
 
-export function prepareLevel(index, mode = "level") {
+function snapshotCarryOverPlants() {
+  const plants = [];
+  state.plants.forEach((row) => {
+    row.forEach((plant) => {
+      if (!plant) {
+        return;
+      }
+      plants.push({
+        id: plant.id,
+        plantId: plant.plantId,
+        row: plant.row,
+        col: plant.col,
+        hp: plant.hp,
+        fireTimer: plant.fireTimer,
+        produceTimer: plant.produceTimer,
+        fuseTimer: plant.fuseTimer,
+        armTimer: plant.armTimer,
+        armed: plant.armed,
+        attackTimer: plant.attackTimer,
+        burstQueue: plant.burstQueue,
+        burstTimer: plant.burstTimer,
+        hitFlash: plant.hitFlash,
+        action: plant.action,
+        actionTimer: plant.actionTimer,
+        animSeed: plant.animSeed,
+      });
+    });
+  });
+  return plants;
+}
+
+function snapshotCarryOverMowers() {
+  return state.lawnMowers.map((mower) => ({
+    id: mower.id,
+    row: mower.row,
+    x: mower.x,
+    active: mower.active,
+    spent: mower.spent,
+    speed: mower.speed,
+  }));
+}
+
+export function prepareLevel(index, mode = "level", options = {}) {
+  const { preserveCarryOver = false } = options;
   state.mode = mode;
   state.levelIndex = index;
+  if (!preserveCarryOver) {
+    state.levelCarryOver = null;
+  }
   const level = currentLevel();
   state.selectedLoadout = ensureValidLoadout(level);
   ui.resultStats.innerHTML = "";
@@ -168,12 +214,24 @@ export function prepareLevel(index, mode = "level") {
 export function startLevel(index, mode = state.mode) {
   state.mode = mode;
   state.levelIndex = index;
+  const carryOver =
+    state.mode === "level" && state.levelCarryOver && state.levelCarryOver.targetLevelIndex === index
+      ? state.levelCarryOver
+      : null;
   resetBoardData();
   state.savedRun = null;
   const level = currentLevel();
   state.selectedLoadout = ensureValidLoadout(level);
   state.speed = state.settings.defaultSpeed;
-  state.sun = level.startSun;
+  state.sun = carryOver ? Math.max(0, Number(carryOver.sun) || 0) : level.startSun;
+  if (carryOver) {
+    state.plants = restorePlants(carryOver.plants || []);
+    state.lawnMowers = restoreLawnMowers(carryOver.lawnMowers || []);
+    Object.keys(state.cardCooldowns).forEach((id) => {
+      state.cardCooldowns[id] = Math.max(0, Number(carryOver.cardCooldowns?.[id]) || 0);
+    });
+  }
+  state.levelCarryOver = null;
   state.running = true;
   state.paused = false;
   state.result = null;
@@ -188,6 +246,22 @@ export function startLevel(index, mode = state.mode) {
   updatePauseCover();
   ui.levelLabel.textContent = state.mode === "endless" ? "∞" : String(level.id);
   saveProgress({ clearActiveRun: true });
+}
+
+export function prepareNextLevel() {
+  if (state.mode !== "level" || !state.result?.victory) {
+    return;
+  }
+  const next = Math.min(state.levelIndex + 1, LEVELS.length - 1);
+  state.levelCarryOver = {
+    sourceLevelIndex: state.levelIndex,
+    targetLevelIndex: next,
+    sun: state.sun,
+    plants: snapshotCarryOverPlants(),
+    lawnMowers: snapshotCarryOverMowers(),
+    cardCooldowns: { ...state.cardCooldowns },
+  };
+  prepareLevel(next, "level", { preserveCarryOver: true });
 }
 
 export function resumeSavedRun() {
@@ -265,6 +339,7 @@ export function endLevel(victory, reason) {
 }
 
 export function returnToMenu() {
+  state.levelCarryOver = null;
   if (state.running) {
     saveProgress({ includeCurrentRun: true });
   }

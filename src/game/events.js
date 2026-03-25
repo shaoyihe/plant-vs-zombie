@@ -2,7 +2,7 @@ import { LEVELS } from "../config/levels.js";
 import { state } from "../core/state.js";
 import { saveProgress } from "../core/storage.js";
 import { clearHoverCell, onCanvasClick, onCanvasMove } from "./board.js";
-import { prepareLevel, resumeSavedRun, returnToMenu, startLevel, updateContinueButton } from "./flow.js";
+import { prepareLevel, prepareNextLevel, resumeSavedRun, returnToMenu, startLevel, updateContinueButton } from "./flow.js";
 import { ui } from "../ui/dom.js";
 import { closeSettings, openSettings, syncTopButtons, updateCardsVisual, updatePauseCover } from "../ui/panels.js";
 import { setPerformanceMode, setRenderQuality, toggleCameraMode } from "../render/draw.js";
@@ -76,17 +76,18 @@ export function bindEvents() {
   });
 
   ui.prepCancelBtn.addEventListener("click", () => {
+    state.levelCarryOver = null;
     ui.prepOverlay.classList.remove("visible");
     ui.menuOverlay.classList.add("visible");
   });
 
   ui.retryBtn.addEventListener("click", () => {
+    state.levelCarryOver = null;
     prepareLevel(state.levelIndex, state.mode);
   });
 
   ui.nextBtn.addEventListener("click", () => {
-    const next = Math.min(state.levelIndex + 1, LEVELS.length - 1);
-    prepareLevel(next, "level");
+    prepareNextLevel();
   });
 
   ui.backMenuBtn.addEventListener("click", () => {

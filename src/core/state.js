@@ -18,6 +18,7 @@ export const state = {
   unlockedLevel: 1,
   hasSavedGame: false,
   savedRun: null,
+  levelCarryOver: null,
   settings: {
     volume: 0.5,
     defaultSpeed: 1,
