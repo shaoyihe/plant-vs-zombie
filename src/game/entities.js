@@ -108,6 +108,8 @@ export function spawnZombie(type, row) {
     slowUntil: 0,
     jumped: false,
     enraged: false,
+    summonTimer: 0,
+    summonCount: 0,
     action: "walk",
     hitFlash: 0,
     animSeed: Math.random() * Math.PI * 2,

@@ -68,4 +68,21 @@ export const ZOMBIES = {
     damage: 34,
     color: "#8b4541",
   },
+  dancing: {
+    id: "dancing",
+    name: "舞王僵尸",
+    hp: 560,
+    speed: 20,
+    damage: 28,
+    color: "#7d7394",
+    summonCooldown: 10,
+  },
+  backup: {
+    id: "backup",
+    name: "伴舞僵尸",
+    hp: 190,
+    speed: 21,
+    damage: 24,
+    color: "#8f8796",
+  },
 };

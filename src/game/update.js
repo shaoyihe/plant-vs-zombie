@@ -63,6 +63,9 @@ function buildEndlessBatch() {
   if (wave >= 12) {
     picks.push("football");
   }
+  if (wave >= 14) {
+    picks.push("dancing", "backup");
+  }
 
   const budget = 2 + Math.floor(difficulty * 1.6);
   const units = [];
@@ -81,6 +84,41 @@ function buildEndlessBatch() {
     units,
     bigWave: wave > 0 && wave % 5 === 0,
   };
+}
+
+function spawnBackupDancer(row, x) {
+  state.zombies.push({
+    id: crypto.randomUUID(),
+    type: "backup",
+    row,
+    x,
+    hp: ZOMBIES.backup.hp,
+    maxHp: ZOMBIES.backup.hp,
+    shieldHp: 0,
+    baseSpeed: ZOMBIES.backup.speed,
+    speed: ZOMBIES.backup.speed,
+    baseDamage: ZOMBIES.backup.damage,
+    damage: ZOMBIES.backup.damage,
+    attackTimer: 0,
+    targetPlant: null,
+    slowUntil: 0,
+    jumped: false,
+    enraged: false,
+    summonTimer: 0,
+    summonCount: 0,
+    action: "summon",
+    actionTimer: 0.42,
+    hitFlash: 0,
+    animSeed: Math.random() * Math.PI * 2,
+    propDropState: {
+      coneDropped: false,
+      bucketDropped: false,
+      paperDropped: false,
+      shieldDropped: false,
+      poleDropped: false,
+    },
+    alive: true,
+  });
 }
 
 export function updatePlants(dt) {
@@ -220,6 +258,27 @@ export function updatePlants(dt) {
           sound.beep(260, 0.03, "triangle", 0.02);
         }
       }
+
+      if (def.kind === "devourer") {
+        plant.attackTimer = Math.max(0, (plant.attackTimer || 0) - dt);
+        if (plant.attackTimer > 0) {
+          plant.action = "digest";
+          plant.actionTimer = 0.18;
+          continue;
+        }
+        const targetZombie = state.zombies.find(
+          (zombie) => zombie.alive && zombie.row === row && zombie.x >= plant.x - 12 && zombie.x - plant.x <= CELL_W * def.range
+        );
+        if (targetZombie) {
+          plant.action = "attack";
+          plant.actionTimer = 0.24;
+          plant.attackTimer = def.chewTime;
+          targetZombie.alive = false;
+          state.stats.kills += 1;
+          state.effects.push({ x: targetZombie.x, y: plant.y + 6, ttl: 0.32, type: "pop" });
+          sound.beep(180, 0.08, "square", 0.04);
+        }
+      }
     }
   }
 }
@@ -267,6 +326,41 @@ export function updateZombies(dt) {
       zombie.speed *= 0.5;
     }
     zombie.damage = zombie.baseDamage;
+
+    if (zombie.type === "dancing") {
+      zombie.summonTimer += dt;
+      const canSummon = zombie.summonCount < 1 && zombie.summonTimer >= ZOMBIES.dancing.summonCooldown;
+      if (canSummon) {
+        const summonSlots = [
+          { row: zombie.row - 1, x: zombie.x + 18 },
+          { row: zombie.row + 1, x: zombie.x + 18 },
+          { row: zombie.row, x: zombie.x + CELL_W * 0.52 },
+          { row: zombie.row, x: zombie.x - CELL_W * 0.48 },
+        ];
+        summonSlots.forEach((slot) => {
+          if (slot.row < 0 || slot.row >= state.plants.length) {
+            return;
+          }
+          const occupied = state.zombies.some(
+            (other) => other.alive && other.row === slot.row && Math.abs(other.x - slot.x) < 28
+          );
+          if (occupied) {
+            return;
+          }
+          spawnBackupDancer(slot.row, slot.x);
+        });
+        zombie.summonTimer = 0;
+        zombie.summonCount += 1;
+        zombie.action = "summon";
+        zombie.actionTimer = 0.7;
+        state.effects.push({
+          x: zombie.x,
+          y: BOARD_Y + zombie.row * CELL_H + CELL_H / 2,
+          ttl: 0.32,
+          type: "mower-spark",
+        });
+      }
+    }
 
     let targetCol = null;
     let targetPlant = null;

@@ -56,6 +56,8 @@ function snapshotZombies() {
     slowUntil: zombie.slowUntil,
     jumped: zombie.jumped,
     enraged: zombie.enraged,
+    summonTimer: zombie.summonTimer,
+    summonCount: zombie.summonCount,
     action: zombie.action,
     hitFlash: zombie.hitFlash,
     animSeed: zombie.animSeed,

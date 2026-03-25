@@ -73,6 +73,18 @@ export const PLANTS = {
     damage: 16,
     hitInterval: 0.6,
   },
+  chomper: {
+    id: "chomper",
+    name: "食人花",
+    cost: 150,
+    cooldown: 18,
+    hp: 320,
+    color: "#7f4da6",
+    kind: "devourer",
+    damage: 9999,
+    chewTime: 8,
+    range: 0.9,
+  },
   cherrybomb: {
     id: "cherrybomb",
     name: "樱桃炸弹",

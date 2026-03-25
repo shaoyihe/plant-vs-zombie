@@ -459,6 +459,24 @@ function createPlantObject(plant) {
       enableShadow(spike);
       group.add(spike);
     }
+  } else if (plant.plantId === "chomper") {
+    head = new THREE.Mesh(new THREE.SphereGeometry(11.5, 14, 14), makeMaterial(0x8a4cb2, 0.7));
+    head.position.y = 10;
+    head.scale.set(1.06, 1, 1.02);
+    const jawTop = new THREE.Mesh(new THREE.SphereGeometry(7.6, 10, 10), makeMaterial(0x9f63c1, 0.62));
+    const jawBottom = new THREE.Mesh(new THREE.SphereGeometry(7.8, 10, 10), makeMaterial(0x714090, 0.7));
+    jawTop.position.set(8, 13, 2);
+    jawBottom.position.set(8, 6, 2);
+    jawTop.scale.set(1.08, 0.52, 0.9);
+    jawBottom.scale.set(1.08, 0.48, 0.9);
+    jawTop.userData.part = "jawTop";
+    jawBottom.userData.part = "jawBottom";
+    enableShadow(jawTop);
+    enableShadow(jawBottom);
+    group.add(jawTop);
+    group.add(jawBottom);
+    addSimpleEyes(group, 11.5, 9.4, 0.82);
+    addPeaLeaves(group, 0x487c31);
   } else {
     const color = plant.plantId === "snowpea" ? 0x74cae6 : def.color;
     head = new THREE.Mesh(new THREE.SphereGeometry(12, 14, 14), makeMaterial(color, 0.6));
@@ -575,6 +593,13 @@ function createZombieObject(zombie) {
   hair.rotation.z = 0.4;
   enableShadow(hair);
   group.add(hair);
+
+  const danceHair = new THREE.Mesh(new THREE.BoxGeometry(14, 3, 10), makeMaterial(0x22181c, 0.82));
+  danceHair.position.set(0, 37.5, 0.5);
+  danceHair.userData.part = "danceHair";
+  danceHair.visible = zombie.type === "dancing";
+  enableShadow(danceHair);
+  group.add(danceHair);
 
   addSimpleEyes(group, 29, 8.8, 0.74);
 
@@ -697,6 +722,33 @@ function createZombieObject(zombie) {
     flag.position.set(-7, 22, 8);
     flag.userData.part = "flagCloth";
     group.add(flag);
+  }
+  if (zombie.type === "dancing") {
+    const gloveL = new THREE.Mesh(new THREE.SphereGeometry(3.1, 8, 8), makeMaterial(0xffffff, 0.35));
+    const gloveR = new THREE.Mesh(new THREE.SphereGeometry(3.1, 8, 8), makeMaterial(0xffffff, 0.35));
+    gloveL.position.set(-15, -6, 0.6);
+    gloveR.position.set(15, -6, 0.6);
+    gloveL.userData.part = "gloveL";
+    gloveR.userData.part = "gloveR";
+    enableShadow(gloveL);
+    enableShadow(gloveR);
+    group.add(gloveL);
+    group.add(gloveR);
+
+    const jacket = new THREE.Mesh(new THREE.BoxGeometry(20, 16, 12), makeMaterial(0x3b2b55, 0.6));
+    jacket.position.set(0, 8, 1.4);
+    jacket.userData.part = "jacket";
+    enableShadow(jacket);
+    group.add(jacket);
+  }
+  if (zombie.type === "backup") {
+    body.scale.set(0.94, 0.92, 0.88);
+    shirt.material.color.setHex(0xe0ddd6);
+    const vest = new THREE.Mesh(new THREE.BoxGeometry(16, 13, 9), makeMaterial(0x6b5e82, 0.68));
+    vest.position.set(0, 8, 1);
+    vest.userData.part = "vest";
+    enableShadow(vest);
+    group.add(vest);
   }
 
   if (zombie.type === "football") {
@@ -928,6 +980,7 @@ function updatePlantObject(plant, obj) {
   const wobble = Math.sin((state.levelTime || 0) * 2.8 + (plant.animSeed || 0)) * 0.06;
   const flash = Math.max(0, plant.hitFlash || 0);
   const actionScale = plant.action === "attack" ? 1.08 : plant.action === "produce" ? 1.12 : plant.action === "hurt" ? 0.95 : 1;
+  const digestRatio = plant.plantId === "chomper" ? Math.max(0, Math.min(1, (plant.attackTimer || 0) / Math.max(1, def.chewTime || 1))) : 0;
 
   obj.position.set(toWorldX(plant.x), 10 + plant.row * 0.2, toWorldY(plant.y));
   obj.rotation.z = wobble;
@@ -943,10 +996,12 @@ function updatePlantObject(plant, obj) {
   const spark = obj.children.find((child) => child.userData.part === "spark");
   const sproutA = obj.children.find((child) => child.userData.part === "sproutA");
   const sproutB = obj.children.find((child) => child.userData.part === "sproutB");
+  const jawTop = obj.children.find((child) => child.userData.part === "jawTop");
+  const jawBottom = obj.children.find((child) => child.userData.part === "jawBottom");
   if (head) {
     const nod = plant.action === "attack" ? -0.3 : plant.action === "hurt" ? 0.22 : 0;
     head.rotation.z = nod + wobble * 2.2;
-    const baseY = plant.plantId === "wallnut" ? 8 : plant.plantId === "tallnut" ? 16 : plant.plantId === "potatomine" ? -2 : 10;
+    const baseY = plant.plantId === "wallnut" ? 8 : plant.plantId === "tallnut" ? 16 : plant.plantId === "potatomine" ? -2 : plant.plantId === "squash" ? 8 : 10;
     head.position.y = baseY + Math.sin((state.levelTime || 0) * 5 + (plant.animSeed || 0)) * (plant.action === "produce" ? 2.4 : 0.6);
     if (plant.plantId === "sunflower") {
       head.rotation.y = Math.sin((state.levelTime || 0) * 1.6 + (plant.animSeed || 0)) * 0.22;
@@ -962,6 +1017,11 @@ function updatePlantObject(plant, obj) {
     if (plant.plantId === "spikeweed") {
       head.rotation.y = Math.sin((state.levelTime || 0) * 4 + (plant.animSeed || 0)) * 0.08;
       head.position.y = -10;
+    }
+    if (plant.plantId === "chomper") {
+      head.rotation.y = plant.action === "attack" ? -0.28 : 0;
+      head.position.y = plant.action === "digest" ? 8.1 + Math.sin((state.levelTime || 0) * 3.5 + (plant.animSeed || 0)) * 0.5 : 10;
+      head.scale.set(1.06 + digestRatio * 0.08, plant.action === "digest" ? 0.92 + digestRatio * 0.08 : 1, 1.02 + digestRatio * 0.06);
     }
   }
   if (stem) {
@@ -995,6 +1055,16 @@ function updatePlantObject(plant, obj) {
   }
   if (sproutB) {
     sproutB.rotation.z = -Math.sin((state.levelTime || 0) * 5 + (plant.animSeed || 0)) * 0.14;
+  }
+  if (jawTop) {
+    jawTop.rotation.z = plant.action === "attack" ? -0.12 : 0;
+    jawTop.rotation.x = plant.action === "attack" ? -0.42 : plant.action === "digest" ? -0.08 - digestRatio * 0.08 : -0.04;
+    jawTop.position.y = plant.action === "digest" ? 12.4 + Math.sin((state.levelTime || 0) * 3 + (plant.animSeed || 0)) * 0.35 : 13;
+  }
+  if (jawBottom) {
+    jawBottom.rotation.z = plant.action === "attack" ? 0.16 : 0;
+    jawBottom.rotation.x = plant.action === "attack" ? 0.52 : plant.action === "digest" ? 0.12 + digestRatio * 0.1 : 0.05;
+    jawBottom.position.y = plant.action === "attack" ? 5.2 : plant.action === "digest" ? 5.7 - Math.sin((state.levelTime || 0) * 3 + (plant.animSeed || 0)) * 0.25 : 6;
   }
 
   obj.traverse((child) => {
@@ -1043,18 +1113,24 @@ function updateZombieObject(zombie, obj) {
   const helmetVisor = obj.children.find((child) => child.userData.part === "helmetVisor");
   const pads = obj.children.find((child) => child.userData.part === "pads");
   const tie = obj.children.find((child) => child.userData.part === "tie");
+  const danceHair = obj.children.find((child) => child.userData.part === "danceHair");
+  const gloveL = obj.children.find((child) => child.userData.part === "gloveL");
+  const gloveR = obj.children.find((child) => child.userData.part === "gloveR");
+  const jacket = obj.children.find((child) => child.userData.part === "jacket");
+  const vest = obj.children.find((child) => child.userData.part === "vest");
   const hpRatio = zombie.hp / Math.max(1, zombie.maxHp);
   const isBiting = zombie.action === "bite";
   const isHurt = zombie.action === "hurt";
+  const isSummoning = zombie.action === "summon";
 
   if (armL) {
-    armL.rotation.z = phase * 0.35;
-    armL.rotation.x = 0.2 + Math.abs(secondaryPhase) * (isBiting ? 0.42 : 0.22);
+    armL.rotation.z = isSummoning ? -0.95 : phase * 0.35;
+    armL.rotation.x = isSummoning ? 0.8 : 0.2 + Math.abs(secondaryPhase) * (isBiting ? 0.42 : 0.22);
     armL.position.y = 5.5 - Math.abs(phase) * 1.4;
   }
   if (armR) {
-    armR.rotation.z = -phase * 0.35;
-    armR.rotation.x = 0.2 + Math.abs(secondaryPhase) * (isBiting ? 0.42 : 0.22);
+    armR.rotation.z = isSummoning ? 0.95 : -phase * 0.35;
+    armR.rotation.x = isSummoning ? 0.8 : 0.2 + Math.abs(secondaryPhase) * (isBiting ? 0.42 : 0.22);
     armR.position.y = 5.5 - Math.abs(phase) * 1.4;
   }
   if (sleeveL) {
@@ -1066,12 +1142,12 @@ function updateZombieObject(zombie, obj) {
     sleeveR.position.y = 12 - Math.abs(phase) * 0.5;
   }
   if (handL) {
-    handL.position.y = -6 - Math.abs(phase) * 1.6;
-    handL.position.z = isBiting ? 1.6 : Math.abs(secondaryPhase) * 0.4;
+    handL.position.y = isSummoning ? -1.5 : -6 - Math.abs(phase) * 1.6;
+    handL.position.z = isSummoning ? 2.2 : isBiting ? 1.6 : Math.abs(secondaryPhase) * 0.4;
   }
   if (handR) {
-    handR.position.y = -6 - Math.abs(phase) * 1.6;
-    handR.position.z = isBiting ? 1.6 : Math.abs(secondaryPhase) * 0.4;
+    handR.position.y = isSummoning ? -1.5 : -6 - Math.abs(phase) * 1.6;
+    handR.position.z = isSummoning ? 2.2 : isBiting ? 1.6 : Math.abs(secondaryPhase) * 0.4;
   }
   if (legL) {
     legL.rotation.z = -phase * 0.28;
@@ -1081,12 +1157,12 @@ function updateZombieObject(zombie, obj) {
   }
   if (head) {
     head.rotation.z = isHurt ? phase * 0.22 : phase * 0.08;
-    head.rotation.x = isBiting ? -0.14 - Math.abs(secondaryPhase) * 0.05 : secondaryPhase * 0.03;
+    head.rotation.x = isSummoning ? -0.08 : isBiting ? -0.14 - Math.abs(secondaryPhase) * 0.05 : secondaryPhase * 0.03;
     head.position.y = 29 + Math.abs(phase) * (isBiting ? 1.2 : 0.4);
     head.position.z = 0.6 + (isBiting ? 1.5 : secondaryPhase * 0.35);
   }
   if (body) {
-    body.rotation.z = isBiting ? -0.08 : 0;
+    body.rotation.z = isSummoning ? phase * 0.1 : isBiting ? -0.08 : 0;
   }
   if (jaw) {
     jaw.rotation.x = isBiting ? 0.5 + Math.abs(phase) * 0.3 : 0.18 + Math.abs(secondaryPhase) * 0.04;
@@ -1160,6 +1236,24 @@ function updateZombieObject(zombie, obj) {
   if (pads) {
     pads.position.y = 18 + Math.abs(phase) * 0.35;
     pads.rotation.z = phase * 0.03;
+  }
+  if (danceHair) {
+    danceHair.rotation.z = isSummoning ? phase * 0.12 : phase * 0.05;
+  }
+  if (gloveL) {
+    gloveL.position.y = isSummoning ? -1 : -6 - Math.abs(phase) * 1.6;
+    gloveL.position.z = isSummoning ? 2.8 : 0.6;
+  }
+  if (gloveR) {
+    gloveR.position.y = isSummoning ? -1 : -6 - Math.abs(phase) * 1.6;
+    gloveR.position.z = isSummoning ? 2.8 : 0.6;
+  }
+  if (jacket) {
+    jacket.rotation.z = isSummoning ? phase * 0.08 : phase * 0.03;
+    jacket.position.y = isSummoning ? 9.6 : 8;
+  }
+  if (vest) {
+    vest.rotation.z = phase * 0.04;
   }
 
   obj.traverse((child) => {

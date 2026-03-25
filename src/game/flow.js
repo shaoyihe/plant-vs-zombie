@@ -80,6 +80,8 @@ function restoreZombies(savedZombies) {
         slowUntil: Number(savedZombie.slowUntil) || 0,
         jumped: Boolean(savedZombie.jumped),
         enraged: Boolean(savedZombie.enraged),
+        summonTimer: Number(savedZombie.summonTimer) || 0,
+        summonCount: Number(savedZombie.summonCount) || 0,
         action: savedZombie.action || "walk",
         hitFlash: Number(savedZombie.hitFlash) || 0,
         animSeed: Number.isFinite(savedZombie.animSeed) ? savedZombie.animSeed : Math.random() * Math.PI * 2,
