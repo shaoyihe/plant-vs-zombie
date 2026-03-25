@@ -3,6 +3,15 @@ import { sound } from "../core/audio.js";
 import { cardList, currentLevel, state } from "../core/state.js";
 import { ui } from "./dom.js";
 
+/**
+ * UI 面板模块：负责所有 HUD 层的渲染和更新。
+ * 包括植物卡面板、设置面板、Toast 提示及按鈕状态同步。
+ */
+
+/**
+ * 生成种包卡片的 HTML 字符串。footerLeft/footerRight 分别为底部左右文字。
+ * @param {boolean} includeCooldown - 是否包含冷却覆盖层（游戏内卡片需要，选卡界面不需要）
+ */
 function renderSeedPacket(plant, footerLeft, footerRight, includeCooldown = false) {
   return `
     <div class="seed-packet-top">
@@ -22,6 +31,10 @@ function renderSeedPacket(plant, footerLeft, footerRight, includeCooldown = fals
   `;
 }
 
+/**
+ * 渲染选卡界面的所有可用植物卡，并设置已选/禁用状态。
+ * 每次选卡发生变化后重新调用以刷新 UI。
+ */
 export function renderPrepCards() {
   const level = currentLevel();
   if (state.mode === "endless") {
@@ -51,6 +64,10 @@ export function renderPrepCards() {
   ui.prepStartBtn.disabled = state.selectedLoadout.length === 0;
 }
 
+/**
+ * 切换选卡界面中一张植物的选择状态。
+ * @param {string} id - 植物 id
+ */
 export function toggleLoadoutPlant(id) {
   if (state.selectedLoadout.includes(id)) {
     state.selectedLoadout = state.selectedLoadout.filter((plantId) => plantId !== id);
@@ -60,6 +77,7 @@ export function toggleLoadoutPlant(id) {
   renderPrepCards();
 }
 
+/** 渲染游戏内卡片面板，并绑定卡片选择事件。 */
 export function renderCards() {
   const cards = cardList();
   ui.cardsPanel.innerHTML = "";
@@ -87,6 +105,7 @@ export function renderCards() {
   updateCardsVisual();
 }
 
+/** 根据当前冷却、阳光和游戏状态更新每张卡片的视觉状态（已选、冷却中、阳光不足等）。 */
 export function updateCardsVisual() {
   const cards = ui.cardsPanel.querySelectorAll(".card");
   cards.forEach((cardNode) => {
@@ -108,21 +127,31 @@ export function updateCardsVisual() {
   });
 }
 
+/** 刷新锄子按鈕的文字，展示当前是否开启锄子模式。 */
 export function syncTopButtons() {
   ui.shovelBtn.textContent = `铲子: ${state.shovelMode ? "开" : "关"}`;
 }
 
+/**
+ * 显示一个短暂的 Toast 提示（1.4 秒后自动隐藏）。
+ * @param {string} text - 提示内容
+ */
 export function showToast(text) {
   ui.toast.textContent = text;
   state.timers.toast = 1.4;
   ui.toast.classList.add("show");
 }
 
+/** 根据游戏是否当前暂停游戏且设置要求覆盖来显隐暂停遮罩。 */
 export function updatePauseCover() {
   const shouldShow = state.running && state.paused && state.settings.pauseBehavior === "overlay";
   ui.pauseCover.classList.toggle("visible", shouldShow);
 }
 
+/**
+ * 每帧调用一次，更新阳光计数器、Toast 计时器和卡片状态。
+ * @param {number} dt
+ */
 export function updateUI(dt) {
   ui.sunCount.textContent = String(Math.floor(state.sun));
   if (state.timers.toast > 0) {
@@ -138,6 +167,7 @@ export function updateUI(dt) {
   updatePauseCover();
 }
 
+/** 打开设置面板并将当前设置写入表单控件。 */
 export function openSettings() {
   ui.volumeInput.value = String(state.settings.volume);
   ui.defaultSpeedSelect.value = String(state.settings.defaultSpeed);
@@ -148,6 +178,7 @@ export function openSettings() {
   ui.settingsOverlay.classList.add("visible");
 }
 
+/** 关闭设置面板。 */
 export function closeSettings() {
   ui.settingsOverlay.classList.remove("visible");
 }

@@ -1,3 +1,8 @@
+/**
+ * DOM 元素引用对象。
+ * 餀个引用均在模块加载时查询一次，避免在运行时重复访问 DOM。
+ * 其他模块均应通过 ui.xxx 访问 DOM 元素而非直接操作 document。
+ */
 export const ui = {
   canvas: document.getElementById("game-canvas"),
   sunCount: document.getElementById("sun-count"),

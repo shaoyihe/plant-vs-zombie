@@ -19,6 +19,12 @@ import { draw } from "../render/draw.js";
 import { ui } from "../ui/dom.js";
 import { renderCards, renderPrepCards, syncTopButtons, updatePauseCover } from "../ui/panels.js";
 
+/**
+ * 游戏流程模块：管理关卡宇张、局对准备、进行中局对和返回菜单等项层状态流转。
+ * 不包含棋盘内部逐帧逻辑（见 update.js）。
+ */
+
+/** 帆整数并将其限制在 [min, max] 区间内。 */
 function clampInt(value, min, max) {
   return Math.max(min, Math.min(max, Math.floor(Number(value) || 0)));
 }
@@ -302,6 +308,13 @@ function snapshotCarryOverEffects() {
     }));
 }
 
+/**
+ * 展示选卡介面（prepOverlay），让玩家选择植物卡片。
+ * @param {number} index - 局卡索引
+ * @param {"level"|"endless"} mode - 游戏模式
+ * @param {Object} options
+ * @param {boolean} options.preserveCarryOver - 为 true 时保留节关数据
+ */
 export function prepareLevel(index, mode = "level", options = {}) {
   const { preserveCarryOver = false } = options;
   state.mode = mode;
@@ -318,6 +331,11 @@ export function prepareLevel(index, mode = "level", options = {}) {
   ui.prepOverlay.classList.add("visible");
 }
 
+/**
+ * 实际启动局对：重置棋盘、将上局结束时的植物、阳光等数据继承到新局。
+ * @param {number} index - 局卡索引
+ * @param {"level"|"endless"} mode - 游戏模式
+ */
 export function startLevel(index, mode = state.mode) {
   state.mode = mode;
   state.levelIndex = index;
@@ -359,6 +377,10 @@ export function startLevel(index, mode = state.mode) {
   saveProgress({ clearActiveRun: true });
 }
 
+/**
+ * 將1关勝利后进入下一关，将当前棋盘数据快照并存入 levelCarryOver。
+ * 若已是最后一关，则停留在最后一关的选卡界面。
+ */
 export function prepareNextLevel() {
   if (state.mode !== "level" || !state.result?.victory) {
     return;
@@ -379,6 +401,10 @@ export function prepareNextLevel() {
   prepareLevel(next, "level", { preserveCarryOver: true });
 }
 
+/**
+ * 从 state.savedRun 恢复保存的局对。
+ * @returns {boolean} 是否成功恢复
+ */
 export function resumeSavedRun() {
   if (!state.savedRun) {
     return false;
@@ -428,6 +454,11 @@ export function resumeSavedRun() {
   return true;
 }
 
+/**
+ * 结束局对，展示胜败结果界面并保存进度。
+ * @param {boolean} victory - 是否胜利
+ * @param {string} reason - 展示在结果界面的简短描述
+ */
 export function endLevel(victory, reason) {
   if (!state.running) {
     return;
@@ -454,6 +485,7 @@ export function endLevel(victory, reason) {
   updateContinueButton();
 }
 
+/** 保存局对（若局对进行中）并返回主菜单。 */
 export function returnToMenu() {
   state.levelCarryOver = null;
   if (state.running) {
@@ -469,6 +501,7 @@ export function returnToMenu() {
   draw();
 }
 
+/** 根据当前存档状态更新菜单上“继续”按鈕的文字和禁用状态。 */
 export function updateContinueButton() {
   ui.continueBtn.disabled = !state.hasSavedGame;
   if (!state.hasSavedGame) {

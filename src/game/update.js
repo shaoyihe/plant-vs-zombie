@@ -16,6 +16,13 @@ import { endLevel } from "./flow.js";
 import { ui } from "../ui/dom.js";
 import { showToast } from "../ui/panels.js";
 
+/**
+ * 棋盘每帧逻辑更新模块。
+ * 每个公开函数对应一类实体的逐帧状态推进，
+ * 由 main.js 的游戏主循环逐帧调用。
+ */
+
+/** 激活指定行的割草机，若已激活或已使用过则跳过。 */
 function activateLawnMower(row) {
   const mower = state.lawnMowers[row];
   if (!mower) {
@@ -42,6 +49,10 @@ function activateLawnMower(row) {
   return true;
 }
 
+/**
+ * 为无尽模式动态生成一波僵尸。
+ * 随波次递增毹度，解锁更多类型的僵尸并增加召唤数量。
+ */
 function buildEndlessBatch() {
   const wave = state.endless.wave;
   const difficulty = Math.min(10, 1 + wave * 0.22);
@@ -222,6 +233,10 @@ function stripMetalGear(zombie) {
   return true;
 }
 
+/**
+ * 逐帧更新所有植物状态：冷却计时、产阳光、射击、爆炸、降温、吸铁等行为。
+ * @param {number} dt - 帧时间间隔（秒）
+ */
 export function updatePlants(dt) {
   for (let row = 0; row < state.plants.length; row += 1) {
     for (let col = 0; col < state.plants[row].length; col += 1) {
@@ -522,6 +537,10 @@ export function updatePlants(dt) {
   }
 }
 
+/**
+ * 逐帧更新所有子弹：移动、穿越火炬转化、边界清除以及命中僵尸检测。
+ * @param {number} dt - 帧时间间隔（秒）
+ */
 export function updateProjectiles(dt) {
   for (let i = state.projectiles.length - 1; i >= 0; i -= 1) {
     const projectile = state.projectiles[i];
@@ -555,6 +574,10 @@ export function updateProjectiles(dt) {
   }
 }
 
+/**
+ * 逐帧更新所有僵尸状态：移动、攻击植物、矿工出土、舞王召唤伴舞、割草机触发及关卡失败检测。
+ * @param {number} dt - 帧时间间隔（秒）
+ */
 export function updateZombies(dt) {
   state.zombies.forEach((zombie) => {
     if (!zombie.alive) {
@@ -736,6 +759,10 @@ export function updateZombies(dt) {
   state.zombies = state.zombies.filter((zombie) => zombie.alive);
 }
 
+/**
+ * 逐帧更新割草机：过棋盘右侧后标记为已用完并垂到地僵尸。
+ * @param {number} dt
+ */
 export function updateLawnMowers(dt) {
   state.lawnMowers.forEach((mower) => {
     if (!mower.active) {
@@ -773,6 +800,10 @@ export function updateLawnMowers(dt) {
   });
 }
 
+/**
+ * 逐帧更新阳光实体：天降阳光慢慢下落并超时后移除。
+ * @param {number} dt
+ */
 export function updateSuns(dt) {
   state.suns.forEach((sun) => {
     if (!sun.alive) {
@@ -793,6 +824,10 @@ export function updateSuns(dt) {
   state.suns = state.suns.filter((sun) => sun.alive);
 }
 
+/**
+ * 逐帧更新特效实体（爆炸、冰冻波等）和单元格状态（如大坑倒计时）。
+ * @param {number} dt
+ */
 export function updateEffects(dt) {
   state.cellStates.forEach((row, rowIndex) => {
     row.forEach((cellState, colIndex) => {
@@ -815,12 +850,20 @@ export function updateEffects(dt) {
   state.effects = state.effects.filter((effect) => effect.ttl > 0);
 }
 
+/**
+ * 逐帧减少所有植物卡的冷却情况。
+ * @param {number} dt
+ */
 export function updateCooldowns(dt) {
   Object.keys(state.cardCooldowns).forEach((id) => {
     state.cardCooldowns[id] = Math.max(0, state.cardCooldowns[id] - dt);
   });
 }
 
+/**
+ * 根据局卡时间触发关卡或无尽模式波次，并更新进度条和波次标签。
+ * 每帧调用一次，内部不传入 dt（支掤关卡时间和无尽 timer）。
+ */
 export function updateWaves() {
   if (state.mode === "endless") {
     if (state.levelTime >= state.endless.nextWaveAt) {
@@ -855,6 +898,10 @@ export function updateWaves() {
   }
 }
 
+/**
+ * 逐帧确认是否应该天降阳光，满足间隔时在随机列位生成阳光。
+ * @param {number} dt
+ */
 export function updateNaturalSun(dt) {
   const level = currentLevel();
   state.timers.naturalSun += dt;

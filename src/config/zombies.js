@@ -1,3 +1,17 @@
+/**
+ * 所有僵尸的静态配置表，以僵尸 id 为键。
+ * 每个僵尸对象包含以下字段（部分字段仅特定类型有效）：
+ *   - id / name：唯一标识与显示名称
+ *   - hp：生命值
+ *   - speed：移动速度（像素/秒）
+ *   - damage：攻击伤害
+ *   - color：Hex 颜色（用于 2D 降级渲染）
+ *   - canJump：是否能跳过植物（polevault）
+ *   - enrageAt / enrageSpeed / enrageDamage：报纸被打掉后的暴怒阈值与属性（newspaper）
+ *   - shieldHp：护盾血量（screendoor）
+ *   - undergroundSpeed：地下移动速度（miner）
+ *   - summonCooldown：召唤伴舞间隔（dancing）
+ */
 export const ZOMBIES = {
   basic: {
     id: "basic",

@@ -7,6 +7,16 @@ import { ui } from "../ui/dom.js";
 import { closeSettings, openSettings, syncTopButtons, updateCardsVisual, updatePauseCover } from "../ui/panels.js";
 import { setPerformanceMode, setRenderQuality, toggleCameraMode } from "../render/draw.js";
 
+/**
+ * 事件绑定模块。
+ * 将所有 UI 按鈕、键盘快捷键、页面退出前存档等事件统一注册。
+ * 不包含任何逻辑，仅负责将用户操作转发到对应的处理函数。
+ */
+
+/**
+ * 初始化并绑定所有游戏交互事件监听器。
+ * 在游戏启动时调用一次。
+ */
 export function bindEvents() {
   ui.canvas.addEventListener("click", onCanvasClick);
   ui.canvas.addEventListener("mousemove", onCanvasMove);

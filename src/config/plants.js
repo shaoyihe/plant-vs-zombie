@@ -1,3 +1,25 @@
+/**
+ * 所有植物的静态配置表，以植物 id 为键。
+ * 每个植物对象包含以下字段（部分字段仅特定 kind 有效）：
+ *   - id / name：唯一标识与显示名称
+ *   - cost：种植所需阳光
+ *   - cooldown：卡片冷却时间（秒）
+ *   - hp：生命值
+ *   - color：Hex 颜色（用于 2D 降级渲染）
+ *   - kind：植物类型，决定其行为逻辑
+ *     · producer  — 产阳光（sunflower）
+ *     · shooter   — 发射豌豆（peashooter / snowpea / repeater / threepeater）
+ *     · tank      — 高血量阻挡（wallnut / tallnut）
+ *     · trap      — 触发爆炸（potatomine）
+ *     · pouncer   — 压制单个僵尸（squash）
+ *     · groundtrap — 持续造成地面伤害（spikeweed）
+ *     · torch     — 点燃经过的豌豆（torchwood）
+ *     · magnet    — 吸取僵尸金属道具（magnetshroom）
+ *     · freezebomb — 全屏冻结（iceshroom）
+ *     · megabomb  — 超大范围爆炸并留下大坑（doomshroom）
+ *     · devourer  — 吞噬单个僵尸（chomper）
+ *     · bomb      — 范围爆炸后消失（cherrybomb）
+ */
 export const PLANTS = {
   sunflower: {
     id: "sunflower",

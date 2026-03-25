@@ -5,6 +5,17 @@ import { state } from "../core/state.js";
 import { ui } from "../ui/dom.js";
 import * as THREE from "../../assets/vendor/three.module.min.js";
 
+/**
+ * 3D 渲染模块，基于 Three.js （WebGL）实现游戏的所有可视化内容。
+ *
+ * 主要责任：
+ *   - 封装内部 sceneState：包括 Three.js 渲染器、场景、摄影机及所有 3D 对象映射
+ *   - 每帧通过 syncMap() 将 state 中的实体与 Three.js对象对齐，增加/移除不变的部分
+ *   - 支持自动畫质调整（fps 监控），低帧率时降至 medium/low 质量
+ *   - 提供交互接口：光线投射识局卡格子、阳光点击检测
+ *   - 3D 尚未就绪时降级为 Canvas 2D 邦小器渲染
+ */
+
 const sceneState = {
   ready: false,
   renderer: null,
@@ -2077,6 +2088,11 @@ function drawFallback2D() {
   }
 }
 
+/**
+ * 主渲染函数，每帧调用一次。
+ * 将 state 中的实体同步到 Three.js 对象呈，并执行场景渲染。
+ * 若 3D 尚未就绪，则展示 Canvas 2D 退化渲染。
+ */
 export function draw() {
   if (document.hidden) {
     return;
@@ -2126,12 +2142,17 @@ export function draw() {
   sceneState.renderer.render(sceneState.scene, sceneState.camera);
 }
 
+/** 切换摄影机在“标准”和“近景”之间切换，返回新的模式字符串。 */
 export function toggleCameraMode() {
   sceneState.cameraMode = sceneState.cameraMode === "default" ? "close" : "default";
   sceneState.cameraTarget = fitCameraPreset(sceneState.cameraMode);
   return sceneState.cameraMode;
 }
 
+/**
+ * 设置渲染画质。
+ * @param {"auto"|"high"|"medium"|"low"} quality - auto 时根据 fps 自动调整
+ */
 export function setRenderQuality(quality) {
   sceneState.quality = ["auto", "high", "medium", "low"].includes(quality) ? quality : "auto";
   if (sceneState.quality === "auto") {
@@ -2143,12 +2164,17 @@ export function setRenderQuality(quality) {
   return sceneState.quality;
 }
 
+/**
+ * 设置性能优先模式，启用时周素比上限和备用渲染等级均低于当前质量预设。
+ * @param {boolean} enabled
+ */
 export function setPerformanceMode(enabled) {
   sceneState.performanceMode = Boolean(enabled);
   applyResolvedQuality();
   return sceneState.performanceMode;
 }
 
+/** 返回当前渲染统计信息：fps、质量字符串、性能模式标志。 */
 export function getRenderStats() {
   const fps = Math.max(1, Math.round(1000 / Math.max(1, sceneState.frameSampleMs || 16)));
   const quality = sceneState.quality === "auto"
@@ -2161,6 +2187,13 @@ export function getRenderStats() {
   };
 }
 
+/**
+ * 在 3D 场景中查找最近屏幕坐标的阳光实体，用于点击收集阳光。
+ * @param {number} screenX - 屏幕坐标 X
+ * @param {number} screenY - 屏幕坐标 Y
+ * @param {number} radius - 确认圆半径（像素）
+ * @returns {Object|null} 匹配的阳光实体，未匹配时为 null
+ */
 export function findSunHit(screenX, screenY, radius = 28) {
   if (!sceneState.ready || !sceneState.camera) {
     return null;
@@ -2190,6 +2223,10 @@ export function findSunHit(screenX, screenY, radius = 28) {
   return bestSun;
 }
 
+/**
+ * 将屏幕坐标通过射线投射转换为棋盘坑位面上的像素坐标。
+ * @returns {{x: number, y: number}|null} 棋盘内像素坐标，超出棋盘范围时返回 null
+ */
 export function screenToBoardPixel(screenX, screenY) {
   if (!sceneState.ready || !sceneState.camera) {
     return null;
@@ -2218,6 +2255,7 @@ export function screenToBoardPixel(screenX, screenY) {
   return { x, y };
 }
 
+/** 返回 3D 渲染器是否就绪且可用，交互模块用于判断是否使用 3D 投射圆检测。 */
 export function isRenderInteractionReady() {
   return sceneState.ready && !sceneState.initFailed;
 }

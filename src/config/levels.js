@@ -1,3 +1,12 @@
+/**
+ * 关卡配置列表。
+ * 每个关卡包含：
+ *   - id / name：关卡编号与名称
+ *   - startSun：初始阳光值
+ *   - naturalSunInterval：天降阳光的间隔秒数
+ *   - waves：波次数组，每波包含触发时间 time（秒）、生成单位 units 以及是否为大波次 bigWave
+ *   - unlockPlants：本关可使用的植物 id 列表
+ */
 export const LEVELS = [
   {
     id: 1,

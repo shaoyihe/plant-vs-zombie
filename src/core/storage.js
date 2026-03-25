@@ -3,10 +3,18 @@ import { LEVELS } from "../config/levels.js";
 import { PLANTS } from "../config/plants.js";
 import { state } from "./state.js";
 
+/**
+ * 存档与加载模块，将游戏进度持久化到 localStorage。
+ * 存档格式：{ unlockedLevel, lastLevelIndex, settings, lastLoadout, activeRun }
+ * activeRun 为空表示无进行中局对，否则包含完整棋盘快照。
+ */
+
+/** 防止非数字值导致存档数据损坏。 */
 function clampNumber(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+/** 将棋盘上所有植物当前状态序列化为可存档的纯数据对象列表。 */
 function snapshotPlants() {
   const plants = [];
   state.plants.forEach((row) => {
@@ -38,6 +46,7 @@ function snapshotPlants() {
   return plants;
 }
 
+/** 将棋盘上所有僵尸当前状态序列化为可存档的纯数据对象列表。 */
 function snapshotZombies() {
   return state.zombies.map((zombie) => ({
     id: zombie.id,
@@ -71,6 +80,7 @@ function snapshotZombies() {
   }));
 }
 
+/** 将棋盘上所有子弹当前状态序列化为可存档的纯数据对象列表。 */
 function snapshotProjectiles() {
   return state.projectiles.map((projectile) => ({
     id: projectile.id,
@@ -88,6 +98,7 @@ function snapshotProjectiles() {
   }));
 }
 
+/** 将所有阳光当前状态序列化为可存档的纯数据对象列表。 */
 function snapshotSuns() {
   return state.suns.map((sun) => ({
     id: sun.id,
@@ -101,6 +112,7 @@ function snapshotSuns() {
   }));
 }
 
+/** 将所有割草机当前状态序列化为可存档的纯数据对象列表。 */
 function snapshotLawnMowers() {
   return state.lawnMowers.map((mower) => ({
     id: mower.id,
@@ -112,6 +124,7 @@ function snapshotLawnMowers() {
   }));
 }
 
+/** 将非空单元格状态（如大坑）序列化为可存档对象列表。 */
 function snapshotCellStates() {
   const cellStates = [];
   state.cellStates.forEach((row, rowIndex) => {
@@ -131,6 +144,10 @@ function snapshotCellStates() {
   return cellStates;
 }
 
+/**
+ * 构建当前局对的完整快照，用于存入 activeRun。
+ * @returns {Object} 局对快照对象
+ */
 function buildActiveRunSnapshot() {
   return {
     mode: state.mode,
@@ -158,6 +175,10 @@ function buildActiveRunSnapshot() {
   };
 }
 
+/**
+ * 对从 localStorage 读取的 activeRun 数据进行安全消毒：
+ * 校验类型、范围院制数字、过滤非法植物 id，防止污数据导致常。
+ */
 function sanitizeActiveRun(activeRun) {
   if (!activeRun || typeof activeRun !== "object") {
     return null;
@@ -191,6 +212,10 @@ function sanitizeActiveRun(activeRun) {
   };
 }
 
+/**
+ * 从 localStorage 加载存档，并将数据写入 state。
+ * 若存档中包含 activeRun 字段，将其消毒后存入 state.savedRun 严备继续。
+ */
 export function loadSave() {
   const raw = localStorage.getItem(SAVE_KEY);
   state.hasSavedGame = Boolean(raw);
@@ -223,6 +248,12 @@ export function loadSave() {
   }
 }
 
+/**
+ * 将当前进度序列化后写入 localStorage。
+ * @param {Object} options
+ * @param {boolean} options.includeCurrentRun - 为 true 时快照当前局对状态并保存到 activeRun
+ * @param {boolean} options.clearActiveRun   - 为 true 时清除 activeRun（开始新局时使用）
+ */
 export function saveProgress(options = {}) {
   const { includeCurrentRun = false, clearActiveRun = false } = options;
   let activeRun = state.savedRun;
