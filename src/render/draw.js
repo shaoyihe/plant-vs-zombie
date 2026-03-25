@@ -30,8 +30,8 @@ const sceneState = {
   lastCanvasW: 0,
   lastCanvasH: 0,
   cameraMode: "default",
-  cameraCurrent: { x: 0, y: 270, z: 860, lookY: -20 },
-  cameraTarget: { x: 0, y: 270, z: 860, lookY: -20 },
+  cameraCurrent: { x: 0, y: 270, z: 860, lookX: 0, lookZ: -20 },
+  cameraTarget: { x: 0, y: 270, z: 860, lookX: 0, lookZ: -20 },
   shake: 0,
   lastKillCount: 0,
   quality: "auto",
@@ -46,8 +46,8 @@ const sceneState = {
 };
 
 const CAMERA_PRESETS = {
-  default: { x: 0, y: 520, z: 560, lookY: -32 },
-  close: { x: 0, y: 360, z: 390, lookY: -22 },
+  default: { offsetX: 0, y: 520, z: 560, lookOffsetZ: -6 },
+  close: { offsetX: 0, y: 360, z: 390, lookOffsetZ: 4 },
 };
 
 const QUALITY_PRESETS = {
@@ -74,20 +74,113 @@ function getEffectivePreset() {
   };
 }
 
+function getCanvasLogicalSize() {
+  return {
+    width: ui.canvas.clientWidth || ui.canvas.width,
+    height: ui.canvas.clientHeight || ui.canvas.height,
+  };
+}
+
+function getBoardWorldBounds() {
+  const left = toWorldX(BOARD_X);
+  const right = toWorldX(BOARD_X + BOARD_W);
+  const top = toWorldY(BOARD_Y);
+  const bottom = toWorldY(BOARD_Y + BOARD_H);
+  return {
+    left,
+    right,
+    top,
+    bottom,
+    centerX: (left + right) / 2,
+    centerZ: (top + bottom) / 2,
+  };
+}
+
+function fitCameraPreset(mode = sceneState.cameraMode) {
+  const preset = CAMERA_PRESETS[mode] || CAMERA_PRESETS.default;
+  const { width, height } = getCanvasLogicalSize();
+  const safeW = Math.max(1, width);
+  const safeH = Math.max(1, height);
+  const aspect = safeW / safeH;
+  const bounds = getBoardWorldBounds();
+  const lookPoint = new THREE.Vector3(
+    bounds.centerX + preset.offsetX,
+    0,
+    bounds.centerZ + preset.lookOffsetZ
+  );
+  let cameraPos = new THREE.Vector3(
+    bounds.centerX + preset.offsetX,
+    preset.y,
+    preset.z
+  );
+
+  const corners = [
+    new THREE.Vector3(bounds.left, 0, bounds.top),
+    new THREE.Vector3(bounds.right, 0, bounds.top),
+    new THREE.Vector3(bounds.left, 0, bounds.bottom),
+    new THREE.Vector3(bounds.right, 0, bounds.bottom),
+  ];
+
+  const fitSpan = 1.72;
+  for (let i = 0; i < 4; i += 1) {
+    const probeCamera = new THREE.PerspectiveCamera(46, aspect, 1, 2600);
+    probeCamera.position.copy(cameraPos);
+    probeCamera.lookAt(lookPoint);
+    probeCamera.updateProjectionMatrix();
+    probeCamera.updateMatrixWorld();
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+
+    corners.forEach((point) => {
+      const projected = point.clone().project(probeCamera);
+      minX = Math.min(minX, projected.x);
+      maxX = Math.max(maxX, projected.x);
+      minY = Math.min(minY, projected.y);
+      maxY = Math.max(maxY, projected.y);
+    });
+
+    const spanX = maxX - minX;
+    const spanY = maxY - minY;
+    let ratio = Math.max(spanX / fitSpan, spanY / fitSpan);
+    ratio = Math.min(1.38, Math.max(0.84, ratio));
+
+    const dir = cameraPos.clone().sub(lookPoint).multiplyScalar(ratio);
+    cameraPos = lookPoint.clone().add(dir);
+  }
+
+  return {
+    x: cameraPos.x,
+    y: cameraPos.y,
+    z: cameraPos.z,
+    lookX: lookPoint.x,
+    lookZ: lookPoint.z,
+  };
+}
+
+function syncCameraTargetToViewport() {
+  if (!sceneState.ready) {
+    return;
+  }
+  sceneState.cameraTarget = fitCameraPreset(sceneState.cameraMode);
+}
+
 function toWorldX(x) {
-  return x - ui.canvas.width / 2;
+  return x - getCanvasLogicalSize().width / 2;
 }
 
 function toWorldY(y) {
-  return ui.canvas.height / 2 - y;
+  return getCanvasLogicalSize().height / 2 - y;
 }
 
 function toScreenX(worldX) {
-  return worldX + ui.canvas.width / 2;
+  return worldX + getCanvasLogicalSize().width / 2;
 }
 
 function toScreenY(worldZ) {
-  return ui.canvas.height / 2 - worldZ;
+  return getCanvasLogicalSize().height / 2 - worldZ;
 }
 
 function resizeRendererIfNeeded() {
@@ -95,14 +188,20 @@ function resizeRendererIfNeeded() {
     return;
   }
   const { renderer, camera } = sceneState;
-  if (ui.canvas.width === sceneState.lastCanvasW && ui.canvas.height === sceneState.lastCanvasH) {
+  const w = ui.canvas.clientWidth || ui.canvas.width;
+  const h = ui.canvas.clientHeight || ui.canvas.height;
+  if (w < 1 || h < 1) {
     return;
   }
-  sceneState.lastCanvasW = ui.canvas.width;
-  sceneState.lastCanvasH = ui.canvas.height;
-  renderer.setSize(ui.canvas.width, ui.canvas.height, false);
-  camera.aspect = ui.canvas.width / ui.canvas.height;
+  if (w === sceneState.lastCanvasW && h === sceneState.lastCanvasH) {
+    return;
+  }
+  sceneState.lastCanvasW = w;
+  sceneState.lastCanvasH = h;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  syncCameraTargetToViewport();
 }
 
 function applyResolvedQuality() {
@@ -294,8 +393,9 @@ function buildStaticWorld() {
   houseLine.position.set(toWorldX(HOUSE_LINE_X), -10, toWorldY(BOARD_Y + BOARD_H / 2));
   sceneState.root.add(houseLine);
 
+  const { width: logicalW, height: logicalH } = getCanvasLogicalSize();
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(ui.canvas.width + 120, ui.canvas.height + 80),
+    new THREE.PlaneGeometry(logicalW + 120, logicalH + 80),
     new THREE.MeshStandardMaterial({ color: 0x6f9e4c, roughness: 0.98, metalness: 0 })
   );
   floor.rotation.x = -Math.PI / 2;
@@ -1850,7 +1950,8 @@ function updateCameraAndShake() {
   current.x += (target.x - current.x) * 0.08;
   current.y += (target.y - current.y) * 0.08;
   current.z += (target.z - current.z) * 0.08;
-  current.lookY += (target.lookY - current.lookY) * 0.08;
+  current.lookX += (target.lookX - current.lookX) * 0.08;
+  current.lookZ += (target.lookZ - current.lookZ) * 0.08;
 
   sceneState.shake = Math.max(0, sceneState.shake - 0.05);
   const shakeStrength = sceneState.performanceMode ? 0.45 : 1;
@@ -1858,7 +1959,7 @@ function updateCameraAndShake() {
   const shakeY = (Math.random() - 0.5) * sceneState.shake * 5 * shakeStrength;
 
   sceneState.camera.position.set(current.x + shakeX, current.y + shakeY, current.z);
-  sceneState.camera.lookAt(0, 0, current.lookY);
+  sceneState.camera.lookAt(current.lookX, 0, current.lookZ);
 }
 
 function initScene() {
@@ -1880,8 +1981,10 @@ function initScene() {
     sceneState.initError = error instanceof Error ? error.message : "WebGL 初始化失败";
     return;
   }
+  const initW = Math.max(1, ui.canvas.clientWidth || ui.canvas.width);
+  const initH = Math.max(1, ui.canvas.clientHeight || ui.canvas.height);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
-  renderer.setSize(ui.canvas.width, ui.canvas.height, false);
+  renderer.setSize(initW, initH, false);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1891,9 +1994,12 @@ function initScene() {
   scene.background = new THREE.Color(0xa5d07a);
   scene.fog = new THREE.Fog(0xa5d07a, 700, 1600);
 
-  const camera = new THREE.PerspectiveCamera(46, ui.canvas.width / ui.canvas.height, 1, 2600);
-  camera.position.set(CAMERA_PRESETS.default.x, CAMERA_PRESETS.default.y, CAMERA_PRESETS.default.z);
-  camera.lookAt(0, 0, CAMERA_PRESETS.default.lookY);
+  const camera = new THREE.PerspectiveCamera(46, initW / initH, 1, 2600);
+  sceneState.lastCanvasW = initW;
+  sceneState.lastCanvasH = initH;
+  const fittedDefault = fitCameraPreset("default");
+  camera.position.set(fittedDefault.x, fittedDefault.y, fittedDefault.z);
+  camera.lookAt(fittedDefault.lookX, 0, fittedDefault.lookZ);
 
   const ambient = new THREE.AmbientLight(0xffffff, 0.72);
   scene.add(ambient);
@@ -1944,8 +2050,8 @@ function initScene() {
   sceneState.groups.effects = effects;
   sceneState.groups.preview = preview;
   sceneState.keyLight = keyLight;
-  sceneState.cameraCurrent = { ...CAMERA_PRESETS.default };
-  sceneState.cameraTarget = { ...CAMERA_PRESETS.default };
+  sceneState.cameraCurrent = { ...fittedDefault };
+  sceneState.cameraTarget = { ...fittedDefault };
   sceneState.ready = true;
 
   buildStaticWorld();
@@ -1972,6 +2078,10 @@ function drawFallback2D() {
 }
 
 export function draw() {
+  if (document.hidden) {
+    return;
+  }
+
   if (!sceneState.ready && !sceneState.initFailed) {
     initScene();
   }
@@ -2018,7 +2128,7 @@ export function draw() {
 
 export function toggleCameraMode() {
   sceneState.cameraMode = sceneState.cameraMode === "default" ? "close" : "default";
-  sceneState.cameraTarget = { ...CAMERA_PRESETS[sceneState.cameraMode] };
+  sceneState.cameraTarget = fitCameraPreset(sceneState.cameraMode);
   return sceneState.cameraMode;
 }
 
@@ -2059,6 +2169,7 @@ export function findSunHit(screenX, screenY, radius = 28) {
   let bestSun = null;
   let bestDist = radius;
   const vector = new THREE.Vector3();
+  const { width: logicalW, height: logicalH } = getCanvasLogicalSize();
 
   state.suns.forEach((sun) => {
     const obj = sceneState.maps.suns.get(sun.id);
@@ -2067,8 +2178,8 @@ export function findSunHit(screenX, screenY, radius = 28) {
     }
     vector.copy(obj.position);
     vector.project(sceneState.camera);
-    const px = (vector.x * 0.5 + 0.5) * ui.canvas.width;
-    const py = (-vector.y * 0.5 + 0.5) * ui.canvas.height;
+    const px = (vector.x * 0.5 + 0.5) * logicalW;
+    const py = (-vector.y * 0.5 + 0.5) * logicalH;
     const dist = Math.hypot(px - screenX, py - screenY);
     if (dist <= bestDist) {
       bestDist = dist;
@@ -2085,9 +2196,10 @@ export function screenToBoardPixel(screenX, screenY) {
   }
 
   const raycaster = new THREE.Raycaster();
+  const { width: logicalW, height: logicalH } = getCanvasLogicalSize();
   const pointer = new THREE.Vector2(
-    (screenX / ui.canvas.width) * 2 - 1,
-    -(screenY / ui.canvas.height) * 2 + 1
+    (screenX / logicalW) * 2 - 1,
+    -(screenY / logicalH) * 2 + 1
   );
   const boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 3);
   const hitPoint = new THREE.Vector3();

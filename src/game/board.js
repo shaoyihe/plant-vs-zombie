@@ -6,6 +6,13 @@ import { ui } from "../ui/dom.js";
 import { showToast } from "../ui/panels.js";
 import { placePlant, removePlant } from "./entities.js";
 
+function eventToCanvasPixel(event) {
+  const rect = ui.canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left - ui.canvas.clientLeft;
+  const y = event.clientY - rect.top - ui.canvas.clientTop;
+  return { x, y };
+}
+
 export function gridFromPixel(x, y) {
   const col = Math.floor((x - BOARD_X) / CELL_W);
   const row = Math.floor((y - BOARD_Y) / CELL_H);
@@ -62,11 +69,7 @@ export function clearHoverCell() {
 }
 
 export function onCanvasMove(event) {
-  const rect = ui.canvas.getBoundingClientRect();
-  const scaleX = ui.canvas.width / rect.width;
-  const scaleY = ui.canvas.height / rect.height;
-  const x = (event.clientX - rect.left) * scaleX;
-  const y = (event.clientY - rect.top) * scaleY;
+  const { x, y } = eventToCanvasPixel(event);
   updateHoverFromScreen(x, y);
 }
 
@@ -75,11 +78,7 @@ export function onCanvasClick(event) {
     return;
   }
 
-  const rect = ui.canvas.getBoundingClientRect();
-  const scaleX = ui.canvas.width / rect.width;
-  const scaleY = ui.canvas.height / rect.height;
-  const x = (event.clientX - rect.left) * scaleX;
-  const y = (event.clientY - rect.top) * scaleY;
+  const { x, y } = eventToCanvasPixel(event);
 
   if (collectSunAt(x, y)) {
     return;
