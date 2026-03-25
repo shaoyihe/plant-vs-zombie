@@ -56,6 +56,11 @@ function snapshotZombies() {
     slowUntil: zombie.slowUntil,
     jumped: zombie.jumped,
     enraged: zombie.enraged,
+    underground: zombie.underground,
+    emerged: zombie.emerged,
+    mineTargetX: zombie.mineTargetX,
+    mineTargetCol: zombie.mineTargetCol,
+    warningTimer: zombie.warningTimer,
     summonTimer: zombie.summonTimer,
     summonCount: zombie.summonCount,
     action: zombie.action,
@@ -77,6 +82,8 @@ function snapshotProjectiles() {
     slow: projectile.slow,
     slowRatio: projectile.slowRatio,
     slowDuration: projectile.slowDuration,
+    fire: projectile.fire,
+    transformedByTorch: projectile.transformedByTorch,
     alive: projectile.alive,
   }));
 }
@@ -105,6 +112,25 @@ function snapshotLawnMowers() {
   }));
 }
 
+function snapshotCellStates() {
+  const cellStates = [];
+  state.cellStates.forEach((row, rowIndex) => {
+    row.forEach((cellState, colIndex) => {
+      if (!cellState) {
+        return;
+      }
+      cellStates.push({
+        row: rowIndex,
+        col: colIndex,
+        type: cellState.type,
+        ttl: cellState.ttl,
+        maxTtl: cellState.maxTtl,
+      });
+    });
+  });
+  return cellStates;
+}
+
 function buildActiveRunSnapshot() {
   return {
     mode: state.mode,
@@ -124,6 +150,7 @@ function buildActiveRunSnapshot() {
     cardCooldowns: { ...state.cardCooldowns },
     stats: { ...state.stats },
     plants: snapshotPlants(),
+    cellStates: snapshotCellStates(),
     zombies: snapshotZombies(),
     projectiles: snapshotProjectiles(),
     suns: snapshotSuns(),
@@ -156,6 +183,7 @@ function sanitizeActiveRun(activeRun) {
     cardCooldowns: activeRun.cardCooldowns && typeof activeRun.cardCooldowns === "object" ? activeRun.cardCooldowns : {},
     stats: activeRun.stats && typeof activeRun.stats === "object" ? activeRun.stats : {},
     plants: Array.isArray(activeRun.plants) ? activeRun.plants : [],
+    cellStates: Array.isArray(activeRun.cellStates) ? activeRun.cellStates : [],
     zombies: Array.isArray(activeRun.zombies) ? activeRun.zombies : [],
     projectiles: Array.isArray(activeRun.projectiles) ? activeRun.projectiles : [],
     suns: Array.isArray(activeRun.suns) ? activeRun.suns : [],

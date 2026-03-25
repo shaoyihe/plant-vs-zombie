@@ -35,10 +35,10 @@ export const LEVELS = [
     waves: [
       { time: 4, units: [{ type: "conehead", count: 2 }, { type: "basic", count: 2 }] },
       { time: 12, units: [{ type: "screendoor", count: 1 }, { type: "flag", count: 1 }, { type: "basic", count: 2 }] },
-      { time: 20, units: [{ type: "newspaper", count: 2 }, { type: "polevault", count: 2 }], bigWave: true },
-      { time: 31, units: [{ type: "buckethead", count: 2 }, { type: "conehead", count: 2 }, { type: "flag", count: 1 }, { type: "backup", count: 2 }] },
-      { time: 44, units: [{ type: "buckethead", count: 1 }, { type: "football", count: 1 }, { type: "dancing", count: 1 }, { type: "screendoor", count: 2 }, { type: "polevault", count: 2 }], bigWave: true },
+      { time: 20, units: [{ type: "newspaper", count: 2 }, { type: "polevault", count: 2 }, { type: "miner", count: 1 }], bigWave: true },
+      { time: 31, units: [{ type: "buckethead", count: 2 }, { type: "conehead", count: 2 }, { type: "flag", count: 1 }, { type: "backup", count: 2 }, { type: "miner", count: 1 }] },
+      { time: 44, units: [{ type: "buckethead", count: 1 }, { type: "football", count: 1 }, { type: "dancing", count: 1 }, { type: "screendoor", count: 2 }, { type: "polevault", count: 2 }, { type: "miner", count: 1 }], bigWave: true },
     ],
-    unlockPlants: ["sunflower", "peashooter", "wallnut", "tallnut", "potatomine", "squash", "spikeweed", "snowpea", "cherrybomb", "repeater", "chomper"],
+    unlockPlants: ["sunflower", "peashooter", "wallnut", "tallnut", "potatomine", "squash", "spikeweed", "snowpea", "cherrybomb", "repeater", "threepeater", "torchwood", "magnetshroom", "iceshroom", "doomshroom", "chomper"],
   },
 ];

@@ -1,4 +1,4 @@
-import { BOARD_H, BOARD_W, BOARD_X, BOARD_Y, CELL_H, CELL_W, COLS, HOUSE_LINE_X } from "../config/constants.js";
+import { BOARD_H, BOARD_W, BOARD_X, BOARD_Y, CELL_H, CELL_W, COLS, HOUSE_LINE_X, ROWS } from "../config/constants.js";
 import { PLANTS } from "../config/plants.js";
 import { ZOMBIES } from "../config/zombies.js";
 import { sound } from "../core/audio.js";
@@ -14,6 +14,7 @@ import {
 } from "./entities.js";
 import { endLevel } from "./flow.js";
 import { ui } from "../ui/dom.js";
+import { showToast } from "../ui/panels.js";
 
 function activateLawnMower(row) {
   const mower = state.lawnMowers[row];
@@ -62,6 +63,9 @@ function buildEndlessBatch() {
   }
   if (wave >= 12) {
     picks.push("football");
+  }
+  if (wave >= 13) {
+    picks.push("miner");
   }
   if (wave >= 14) {
     picks.push("dancing", "backup");
@@ -121,6 +125,103 @@ function spawnBackupDancer(row, x) {
   });
 }
 
+function findMinerTarget(row) {
+  const rowPlants = state.plants[row] || [];
+  for (let col = 0; col < COLS; col += 1) {
+    const plant = rowPlants[col];
+    if (plant && PLANTS[plant.plantId]?.kind !== "tank") {
+      return { col, plant };
+    }
+  }
+  for (let col = 0; col < COLS; col += 1) {
+    const plant = rowPlants[col];
+    if (plant) {
+      return { col, plant };
+    }
+  }
+  return null;
+}
+
+function findMinerEmergeX(row) {
+  const target = findMinerTarget(row);
+  if (target?.plant) {
+    return Math.min(target.plant.x + 28, BOARD_X + BOARD_W - 40);
+  }
+  return HOUSE_LINE_X + 60;
+}
+
+function igniteProjectile(projectile, torchwood) {
+  if (!projectile || projectile.transformedByTorch) {
+    return;
+  }
+  const wasSlow = Boolean(projectile.slow);
+  projectile.transformedByTorch = true;
+  projectile.fire = true;
+  projectile.damage = Math.max(projectile.damage * 2, projectile.damage + (PLANTS.torchwood.boostDamage || 20));
+  projectile.slow = false;
+  projectile.slowDuration = 0;
+  projectile.slowRatio = 1;
+  state.effects.push({
+    x: torchwood.x,
+    y: torchwood.y,
+    ttl: 0.16,
+    type: "fire-hit",
+  });
+  if (wasSlow && state.timers.torchHint <= 0) {
+    state.timers.torchHint = 2.4;
+    showToast("寒冰豌豆被火炬点燃，已变为火焰豌豆");
+  }
+}
+
+function hasMetalGear(zombie) {
+  if (!zombie || !zombie.alive || zombie.underground) {
+    return false;
+  }
+  if (zombie.type === "buckethead" && !zombie.propDropState.bucketDropped && zombie.hp > zombie.maxHp * 0.48) {
+    return true;
+  }
+  if (zombie.type === "screendoor" && zombie.shieldHp > 0 && !zombie.propDropState.shieldDropped) {
+    return true;
+  }
+  if (zombie.type === "football" && !zombie.propDropState.helmetDropped && zombie.hp > zombie.maxHp * 0.42) {
+    return true;
+  }
+  if (zombie.type === "miner" && !zombie.propDropState.minerHelmetDropped) {
+    return true;
+  }
+  return false;
+}
+
+function stripMetalGear(zombie) {
+  if (!zombie || !hasMetalGear(zombie)) {
+    return false;
+  }
+
+  const effectY = BOARD_Y + zombie.row * CELL_H + CELL_H / 2;
+  if (zombie.type === "buckethead") {
+    zombie.propDropState.bucketDropped = true;
+    zombie.hp = Math.min(zombie.hp, zombie.maxHp * 0.48);
+    state.effects.push({ x: zombie.x, y: effectY - 12, ttl: 0.6, type: "bucket-drop" });
+  } else if (zombie.type === "screendoor") {
+    zombie.propDropState.shieldDropped = true;
+    zombie.shieldHp = 0;
+    state.effects.push({ x: zombie.x - 18, y: effectY, ttl: 0.6, type: "door-drop" });
+  } else if (zombie.type === "football") {
+    zombie.propDropState.helmetDropped = true;
+    zombie.hp = Math.min(zombie.hp, zombie.maxHp * 0.42);
+    state.effects.push({ x: zombie.x, y: effectY - 10, ttl: 0.5, type: "bucket-drop" });
+  } else if (zombie.type === "miner") {
+    zombie.propDropState.minerHelmetDropped = true;
+    state.effects.push({ x: zombie.x, y: effectY - 10, ttl: 0.5, type: "bucket-drop" });
+  }
+
+  zombie.action = "hurt";
+  zombie.actionTimer = 0.2;
+  state.effects.push({ x: zombie.x, y: effectY, ttl: 0.22, type: "magnet-pull" });
+  sound.beep(340, 0.05, "triangle", 0.03);
+  return true;
+}
+
 export function updatePlants(dt) {
   for (let row = 0; row < state.plants.length; row += 1) {
     for (let col = 0; col < state.plants[row].length; col += 1) {
@@ -149,7 +250,13 @@ export function updatePlants(dt) {
 
       if (def.kind === "shooter") {
         plant.fireTimer += dt;
-        if (hasZombieAhead(row, col) && plant.fireTimer >= def.fireRate) {
+        const targetRows = Array.isArray(def.spreadRows)
+          ? def.spreadRows
+              .map((offset) => row + offset)
+              .filter((candidateRow, index, rows) => candidateRow >= 0 && candidateRow < ROWS && rows.indexOf(candidateRow) === index)
+          : [row];
+        const hasTarget = targetRows.some((targetRow) => hasZombieAhead(targetRow, col));
+        if (hasTarget && plant.fireTimer >= def.fireRate) {
           plant.fireTimer = 0;
           plant.action = "attack";
           plant.actionTimer = 0.18;
@@ -157,14 +264,36 @@ export function updatePlants(dt) {
             plant.burstQueue = def.burst;
             plant.burstTimer = 0;
           } else {
-            spawnProjectile(plant, def, 0, Boolean(def.slow));
+            targetRows.forEach((targetRow) => {
+              if (!hasZombieAhead(targetRow, col)) {
+                return;
+              }
+              const rowOffset = targetRow - row;
+              spawnProjectile(plant, def, rowOffset * CELL_H, Boolean(def.slow), targetRow);
+            });
           }
           sound.beep(460, 0.05, "triangle", 0.03);
         }
         if (plant.burstQueue > 0) {
           plant.burstTimer -= dt;
           if (plant.burstTimer <= 0) {
-            spawnProjectile(plant, def, plant.burstQueue % 2 === 0 ? -4 : 4, Boolean(def.slow));
+            if (Array.isArray(def.spreadRows)) {
+              targetRows.forEach((targetRow) => {
+                if (!hasZombieAhead(targetRow, col)) {
+                  return;
+                }
+                const rowOffset = targetRow - row;
+                spawnProjectile(
+                  plant,
+                  def,
+                  rowOffset * CELL_H + (plant.burstQueue % 2 === 0 ? -4 : 4),
+                  Boolean(def.slow),
+                  targetRow
+                );
+              });
+            } else {
+              spawnProjectile(plant, def, plant.burstQueue % 2 === 0 ? -4 : 4, Boolean(def.slow));
+            }
             plant.action = "attack";
             plant.actionTimer = 0.12;
             plant.burstQueue -= 1;
@@ -190,6 +319,91 @@ export function updatePlants(dt) {
           state.effects.push({ x: plant.x, y: plant.y, ttl: 0.4, type: "boom", radius: radius * 0.7 });
           state.plants[row][col] = null;
           sound.beep(90, 0.2, "sawtooth", 0.09);
+        }
+      }
+
+      if (def.kind === "freezebomb") {
+        plant.fuseTimer += dt;
+        if (plant.fuseTimer >= def.fuse) {
+          state.zombies.forEach((zombie) => {
+            if (!zombie.alive || zombie.underground) {
+              return;
+            }
+            zombie.slowUntil = Math.max(zombie.slowUntil, state.levelTime + def.freezeDuration);
+            zombie.hitFlash = 0.18;
+            zombie.action = "hurt";
+            zombie.actionTimer = 0.18;
+            zombie.hp -= def.damage;
+            state.effects.push({
+              x: zombie.x,
+              y: BOARD_Y + zombie.row * CELL_H + CELL_H / 2,
+              ttl: 0.24,
+              type: "ice-hit",
+            });
+            if (zombie.hp <= 0) {
+              zombie.alive = false;
+              state.stats.kills += 1;
+              state.effects.push({
+                x: zombie.x,
+                y: BOARD_Y + zombie.row * CELL_H + CELL_H / 2,
+                ttl: 0.6,
+                type: "zombie-fall",
+                zombieType: zombie.type,
+                slowed: true,
+              });
+              state.effects.push({
+                x: zombie.x,
+                y: BOARD_Y + zombie.row * CELL_H + CELL_H / 2,
+                ttl: 0.45,
+                type: "pop",
+              });
+            }
+          });
+          state.effects.push({ x: plant.x, y: plant.y, ttl: 0.45, type: "ice-wave", radius: BOARD_W * 0.42 });
+          state.plants[row][col] = null;
+          sound.beep(210, 0.16, "sine", 0.05);
+        }
+      }
+
+      if (def.kind === "megabomb") {
+        plant.fuseTimer += dt;
+        if (plant.fuseTimer >= def.fuse) {
+          const radius = def.radiusCells * CELL_W;
+          state.zombies.forEach((zombie) => {
+            if (!zombie.alive || zombie.underground) {
+              return;
+            }
+            const zombieY = BOARD_Y + zombie.row * CELL_H + CELL_H / 2;
+            const dist = Math.hypot(zombie.x - plant.x, zombieY - plant.y);
+            if (dist <= radius) {
+              applyDamageToZombie(zombie, def.damage);
+            }
+          });
+          state.effects.push({ x: plant.x, y: plant.y, ttl: 0.58, type: "doom-blast", radius: radius * 0.86 });
+          state.effects.push({ x: plant.x, y: plant.y, ttl: 0.44, type: "boom", radius: radius * 0.62 });
+          state.effects.push({ x: plant.x, y: plant.y, ttl: 1.15, type: "doom-heat", radius: radius * 0.92 });
+          state.effects.push({ x: plant.x, y: plant.y, ttl: 1.55, type: "doom-edge", radius: radius * 0.8 });
+          for (let index = 0; index < 7; index += 1) {
+            const angle = (index / 7) * Math.PI * 2;
+            const distance = 10 + index * 4;
+            state.effects.push({
+              x: plant.x + Math.cos(angle) * distance,
+              y: plant.y + Math.sin(angle) * distance * 0.45,
+              ttl: 0.95 + index * 0.05,
+              type: "doom-smoke",
+              driftX: Math.cos(angle) * (10 + Math.random() * 8),
+              rise: 0,
+              size: 12 + index * 2.6,
+            });
+          }
+          state.cellStates[row][col] = {
+            type: "crater",
+            ttl: def.craterDuration,
+            maxTtl: def.craterDuration,
+          };
+          state.plants[row][col] = null;
+          sound.beep(70, 0.32, "sawtooth", 0.1);
+          sound.beep(48, 0.2, "square", 0.05);
         }
       }
 
@@ -259,6 +473,31 @@ export function updatePlants(dt) {
         }
       }
 
+      if (def.kind === "magnet") {
+        plant.fireTimer += dt;
+        if (plant.fireTimer >= def.fireRate) {
+          const rangePx = def.range * CELL_W;
+          const candidates = state.zombies
+            .filter((zombie) => hasMetalGear(zombie))
+            .map((zombie) => ({
+              zombie,
+              dist: Math.hypot(zombie.x - plant.x, BOARD_Y + zombie.row * CELL_H + CELL_H / 2 - plant.y),
+            }))
+            .filter((entry) => entry.dist <= rangePx)
+            .sort((left, right) => left.dist - right.dist);
+          const target = candidates[0]?.zombie;
+          if (target && stripMetalGear(target)) {
+            plant.fireTimer = 0;
+            plant.action = "attack";
+            plant.actionTimer = 0.26;
+          }
+        }
+      }
+
+      if (def.kind === "torch") {
+        plant.action = "idle";
+      }
+
       if (def.kind === "devourer") {
         plant.attackTimer = Math.max(0, (plant.attackTimer || 0) - dt);
         if (plant.attackTimer > 0) {
@@ -290,14 +529,23 @@ export function updateProjectiles(dt) {
       state.projectiles.splice(i, 1);
       continue;
     }
+    const previousX = projectile.x;
     projectile.x += projectile.speed * dt;
+    state.plants[projectile.row]?.forEach((plant) => {
+      if (!plant || plant.plantId !== "torchwood") {
+        return;
+      }
+      if (previousX < plant.x && projectile.x >= plant.x - 4) {
+        igniteProjectile(projectile, plant);
+      }
+    });
     if (projectile.x > BOARD_X + BOARD_W + 30) {
       releaseProjectile(projectile);
       state.projectiles.splice(i, 1);
       continue;
     }
     const hit = state.zombies.find(
-      (zombie) => zombie.alive && zombie.row === projectile.row && Math.abs(zombie.x - projectile.x) < 22
+      (zombie) => zombie.alive && zombie.row === projectile.row && !zombie.underground && Math.abs(zombie.x - projectile.x) < 22
     );
     if (hit) {
       applyDamageToZombie(hit, projectile.damage, projectile);
@@ -318,9 +566,54 @@ export function updateZombies(dt) {
     if (zombie.actionTimer <= 0 && zombie.action === "hurt") {
       zombie.action = "walk";
     }
+    if (zombie.actionTimer <= 0 && zombie.action === "emerge") {
+      zombie.action = "walk";
+    }
+    if (zombie.actionTimer <= 0 && zombie.action === "summon") {
+      zombie.action = "walk";
+    }
 
     const def = ZOMBIES[zombie.type];
     const rowPlants = state.plants[zombie.row];
+
+    if (zombie.type === "miner" && zombie.underground) {
+      zombie.action = "dig";
+      zombie.damage = zombie.baseDamage;
+      zombie.speed = def.undergroundSpeed;
+      const minerTarget = findMinerTarget(zombie.row);
+      if (minerTarget) {
+        zombie.mineTargetCol = minerTarget.col;
+      }
+      zombie.mineTargetX = zombie.mineTargetX ?? findMinerEmergeX(zombie.row);
+      zombie.warningTimer = Math.max(0, (zombie.warningTimer || 0) - dt);
+      if (zombie.warningTimer <= 0 && zombie.mineTargetCol !== null) {
+        const warningX = BOARD_X + zombie.mineTargetCol * CELL_W + CELL_W / 2;
+        state.effects.push({
+          x: warningX,
+          y: BOARD_Y + zombie.row * CELL_H + CELL_H / 2,
+          ttl: 0.42,
+          type: "miner-warning",
+        });
+        zombie.warningTimer = 0.72;
+      }
+      zombie.x -= zombie.speed * dt;
+      if (zombie.x <= zombie.mineTargetX) {
+        zombie.underground = false;
+        zombie.emerged = true;
+        zombie.action = "emerge";
+        zombie.actionTimer = 0.45;
+        zombie.x = zombie.mineTargetX;
+        state.effects.push({
+          x: zombie.x,
+          y: BOARD_Y + zombie.row * CELL_H + CELL_H - 12,
+          ttl: 0.3,
+          type: "dust",
+        });
+        sound.beep(150, 0.05, "square", 0.03);
+      }
+      return;
+    }
+
     zombie.speed = zombie.baseSpeed;
     if (state.levelTime <= zombie.slowUntil) {
       zombie.speed *= 0.5;
@@ -364,7 +657,16 @@ export function updateZombies(dt) {
 
     let targetCol = null;
     let targetPlant = null;
-    for (let col = 0; col < COLS; col += 1) {
+    const targetCols = [];
+    if (zombie.type === "miner" && zombie.emerged && zombie.mineTargetCol !== null) {
+      targetCols.push(zombie.mineTargetCol);
+    }
+    for (let index = 0; index < COLS; index += 1) {
+      if (!targetCols.includes(index)) {
+        targetCols.push(index);
+      }
+    }
+    for (const col of targetCols) {
       const plant = rowPlants[col];
       if (!plant) {
         continue;
@@ -378,7 +680,7 @@ export function updateZombies(dt) {
     }
 
     if (targetPlant && Math.abs(zombie.x - targetPlant.x) < 45) {
-      if (zombie.action !== "hurt") {
+      if (zombie.action !== "hurt" && zombie.action !== "emerge") {
         zombie.action = "bite";
       }
       if (maybePoleVaultJump(zombie, targetPlant)) {
@@ -405,7 +707,7 @@ export function updateZombies(dt) {
         }
       }
     } else {
-      if (zombie.action !== "hurt") {
+      if (zombie.action !== "hurt" && zombie.action !== "emerge") {
         zombie.action = "walk";
       }
       zombie.x -= zombie.speed * dt;
@@ -492,7 +794,22 @@ export function updateSuns(dt) {
 }
 
 export function updateEffects(dt) {
+  state.cellStates.forEach((row, rowIndex) => {
+    row.forEach((cellState, colIndex) => {
+      if (!cellState) {
+        return;
+      }
+      cellState.ttl -= dt;
+      if (cellState.ttl <= 0) {
+        state.cellStates[rowIndex][colIndex] = null;
+      }
+    });
+  });
   state.effects.forEach((effect) => {
+    if (effect.type === "doom-smoke") {
+      effect.x += (effect.driftX || 0) * dt;
+      effect.rise = (effect.rise || 0) + 22 * dt;
+    }
     effect.ttl -= dt;
   });
   state.effects = state.effects.filter((effect) => effect.ttl > 0);

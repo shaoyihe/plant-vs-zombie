@@ -28,6 +28,7 @@ export const state = {
     performanceMode: false,
   },
   plants: [],
+  cellStates: [],
   lawnMowers: [],
   zombies: [],
   projectiles: [],
@@ -37,6 +38,7 @@ export const state = {
   timers: {
     naturalSun: 0,
     toast: 0,
+    torchHint: 0,
   },
   pendingSpawnTimers: [],
   result: null,
@@ -70,6 +72,10 @@ export function createGrid() {
   return result;
 }
 
+export function createCellStateGrid() {
+  return createGrid();
+}
+
 export function createLawnMowers() {
   const result = [];
   for (let row = 0; row < ROWS; row += 1) {
@@ -93,6 +99,7 @@ export function clearPendingSpawns() {
 export function resetBoardData() {
   clearPendingSpawns();
   state.plants = createGrid();
+  state.cellStates = createCellStateGrid();
   state.lawnMowers = createLawnMowers();
   state.zombies = [];
   state.projectiles = [];
@@ -117,6 +124,7 @@ export function resetBoardData() {
   state.stats.plantsRemoved = 0;
   state.stats.projectilesFired = 0;
   state.timers.naturalSun = 0;
+  state.timers.torchHint = 0;
 }
 
 export function currentLevel() {

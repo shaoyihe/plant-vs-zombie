@@ -1,6 +1,6 @@
 import { LEVELS } from "./config/levels.js";
 import { PLANTS } from "./config/plants.js";
-import { createGrid, state } from "./core/state.js";
+import { createCellStateGrid, createGrid, state } from "./core/state.js";
 import { loadSave, saveProgress } from "./core/storage.js";
 import { bindEvents } from "./game/events.js";
 import { updateContinueButton } from "./game/flow.js";
@@ -73,6 +73,7 @@ function boot() {
   setPerformanceMode(state.settings.performanceMode);
   bindEvents();
   state.plants = createGrid();
+  state.cellStates = createCellStateGrid();
   Object.keys(PLANTS).forEach((id) => {
     state.cardCooldowns[id] = 0;
   });

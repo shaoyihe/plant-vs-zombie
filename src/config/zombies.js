@@ -68,6 +68,15 @@ export const ZOMBIES = {
     damage: 34,
     color: "#8b4541",
   },
+  miner: {
+    id: "miner",
+    name: "矿工僵尸",
+    hp: 320,
+    speed: 21,
+    damage: 26,
+    color: "#857766",
+    undergroundSpeed: 58,
+  },
   dancing: {
     id: "dancing",
     name: "舞王僵尸",

@@ -42,6 +42,10 @@ export function placePlant(row, col, plantId) {
     showToast("该地块已有植物");
     return false;
   }
+  if (state.cellStates[row]?.[col]?.type === "crater") {
+    showToast("该地块仍有大坑");
+    return false;
+  }
 
   const center = cellCenter(row, col);
   state.plants[row][col] = {
@@ -91,6 +95,7 @@ export function spawnZombie(type, row) {
   if (!def) {
     return;
   }
+  const isMiner = type === "miner";
   state.zombies.push({
     id: crypto.randomUUID(),
     type,
@@ -108,9 +113,14 @@ export function spawnZombie(type, row) {
     slowUntil: 0,
     jumped: false,
     enraged: false,
+    underground: isMiner,
+    emerged: !isMiner,
+    mineTargetX: null,
+    mineTargetCol: null,
+    warningTimer: 0,
     summonTimer: 0,
     summonCount: 0,
-    action: "walk",
+    action: isMiner ? "dig" : "walk",
     hitFlash: 0,
     animSeed: Math.random() * Math.PI * 2,
     propDropState: {
@@ -119,6 +129,8 @@ export function spawnZombie(type, row) {
       paperDropped: false,
       shieldDropped: false,
       poleDropped: false,
+      helmetDropped: false,
+      minerHelmetDropped: false,
     },
     alive: true,
   });
@@ -146,20 +158,22 @@ export function spawnWaveBatch(batch) {
 
 export function hasZombieAhead(row, col) {
   const leftX = BOARD_X + col * CELL_W;
-  return state.zombies.some((zombie) => zombie.row === row && zombie.x > leftX - 30 && zombie.alive);
+  return state.zombies.some((zombie) => zombie.row === row && zombie.x > leftX - 30 && zombie.alive && !zombie.underground);
 }
 
-export function spawnProjectile(plant, def, offsetY = 0, slow = false) {
+export function spawnProjectile(plant, def, offsetY = 0, slow = false, targetRow = plant.row) {
   const pooled = state.pools.projectiles.pop() || {};
   pooled.id = crypto.randomUUID();
   pooled.x = plant.x + 22;
   pooled.y = plant.y + offsetY;
-  pooled.row = plant.row;
+  pooled.row = targetRow;
   pooled.speed = def.projectileSpeed;
   pooled.damage = def.damage;
   pooled.slow = slow;
   pooled.slowRatio = def.slow || 1;
   pooled.slowDuration = def.slowDuration || 0;
+  pooled.fire = false;
+  pooled.transformedByTorch = false;
   pooled.alive = true;
   state.projectiles.push(pooled);
   state.stats.projectilesFired += 1;
@@ -203,7 +217,14 @@ export function applyDamageToZombie(zombie, damage, projectile) {
   }
 
   zombie.hp -= damage;
-  if (projectile && projectile.slow) {
+  if (projectile && projectile.fire) {
+    state.effects.push({
+      x: zombie.x - 1,
+      y: BOARD_Y + zombie.row * CELL_H + CELL_H / 2,
+      ttl: 0.2,
+      type: "fire-hit",
+    });
+  } else if (projectile && projectile.slow) {
     zombie.slowUntil = Math.max(zombie.slowUntil, state.levelTime + projectile.slowDuration);
     state.effects.push({
       x: zombie.x - 2,

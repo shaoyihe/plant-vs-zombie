@@ -53,6 +53,7 @@ export function updateHoverFromScreen(x, y) {
     x: boardPoint.x,
     y: boardPoint.y,
     hasPlant: Boolean(state.plants[grid.row][grid.col]),
+    blockedType: state.cellStates[grid.row]?.[grid.col]?.type || null,
   };
 }
 

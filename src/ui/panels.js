@@ -131,6 +131,9 @@ export function updateUI(dt) {
       ui.toast.classList.remove("show");
     }
   }
+  if (state.timers.torchHint > 0) {
+    state.timers.torchHint = Math.max(0, state.timers.torchHint - dt);
+  }
   updateCardsVisual();
   updatePauseCover();
 }

@@ -5,6 +5,7 @@ import { ZOMBIES } from "../config/zombies.js";
 import { sound } from "../core/audio.js";
 import {
   clearPendingSpawns,
+  createCellStateGrid,
   createGrid,
   createLawnMowers,
   currentLevel,
@@ -58,6 +59,23 @@ function restorePlants(savedPlants) {
   return plants;
 }
 
+function restoreCellStates(savedCellStates) {
+  const cellStates = createCellStateGrid();
+  savedCellStates.forEach((savedCellState) => {
+    if (!savedCellState || savedCellState.type !== "crater") {
+      return;
+    }
+    const row = clampInt(savedCellState.row, 0, ROWS - 1);
+    const col = clampInt(savedCellState.col, 0, COLS - 1);
+    cellStates[row][col] = {
+      type: "crater",
+      ttl: Math.max(0.05, Number(savedCellState.ttl) || 0),
+      maxTtl: Math.max(0.05, Number(savedCellState.maxTtl) || Number(savedCellState.ttl) || 0),
+    };
+  });
+  return cellStates;
+}
+
 function restoreZombies(savedZombies) {
   return savedZombies
     .filter((savedZombie) => savedZombie && ZOMBIES[savedZombie.type])
@@ -80,6 +98,11 @@ function restoreZombies(savedZombies) {
         slowUntil: Number(savedZombie.slowUntil) || 0,
         jumped: Boolean(savedZombie.jumped),
         enraged: Boolean(savedZombie.enraged),
+        underground: Boolean(savedZombie.underground),
+        emerged: Boolean(savedZombie.emerged),
+        mineTargetX: Number(savedZombie.mineTargetX) || null,
+        mineTargetCol: Number.isInteger(savedZombie.mineTargetCol) ? savedZombie.mineTargetCol : null,
+        warningTimer: Number(savedZombie.warningTimer) || 0,
         summonTimer: Number(savedZombie.summonTimer) || 0,
         summonCount: Number(savedZombie.summonCount) || 0,
         action: savedZombie.action || "walk",
@@ -108,6 +131,8 @@ function restoreProjectiles(savedProjectiles) {
     slow: Boolean(projectile.slow),
     slowRatio: Number(projectile.slowRatio) || 1,
     slowDuration: Number(projectile.slowDuration) || 0,
+    fire: Boolean(projectile.fire),
+    transformedByTorch: Boolean(projectile.transformedByTorch),
     alive: projectile.alive !== false,
   }));
 }
@@ -139,6 +164,19 @@ function restoreLawnMowers(savedMowers) {
     };
   });
   return lawnMowers;
+}
+
+function restoreEffects(savedEffects) {
+  return savedEffects.map((effect) => ({
+    x: Number(effect.x) || BOARD_X,
+    y: Number(effect.y) || BOARD_Y,
+    ttl: Math.max(0.05, Number(effect.ttl) || 0.12),
+    type: effect.type || "dust",
+    radius: Number(effect.radius) || 0,
+    zombieType: effect.zombieType || null,
+    slowed: Boolean(effect.slowed),
+    plantId: effect.plantId || null,
+  }));
 }
 
 function renderResultStats() {
@@ -195,6 +233,75 @@ function snapshotCarryOverMowers() {
   }));
 }
 
+function snapshotCarryOverCellStates() {
+  const cellStates = [];
+  state.cellStates.forEach((row, rowIndex) => {
+    row.forEach((cellState, colIndex) => {
+      if (!cellState) {
+        return;
+      }
+      cellStates.push({
+        row: rowIndex,
+        col: colIndex,
+        type: cellState.type,
+        ttl: cellState.ttl,
+        maxTtl: cellState.maxTtl,
+      });
+    });
+  });
+  return cellStates;
+}
+
+function snapshotCarryOverSuns() {
+  return state.suns
+    .filter((sun) => sun && sun.alive)
+    .map((sun) => ({
+      id: sun.id,
+      x: sun.x,
+      y: sun.y,
+      value: sun.value,
+      ttl: sun.ttl,
+      source: sun.source,
+      vy: sun.vy,
+      alive: true,
+    }));
+}
+
+function snapshotCarryOverProjectiles() {
+  return state.projectiles
+    .filter((projectile) => projectile && projectile.alive)
+    .map((projectile) => ({
+      id: projectile.id,
+      x: projectile.x,
+      y: projectile.y,
+      row: projectile.row,
+      speed: projectile.speed,
+      damage: projectile.damage,
+      slow: projectile.slow,
+      slowRatio: projectile.slowRatio,
+      slowDuration: projectile.slowDuration,
+      fire: projectile.fire,
+      transformedByTorch: projectile.transformedByTorch,
+      alive: true,
+    }));
+}
+
+function snapshotCarryOverEffects() {
+  const allowedTypes = new Set(["dust", "mower-spark", "mower-start"]);
+  return state.effects
+    .filter((effect) => effect && allowedTypes.has(effect.type) && Number(effect.ttl) > 0.04)
+    .map((effect) => ({
+      x: effect.x,
+      y: effect.y,
+      ttl: Math.min(0.35, Math.max(0.08, Number(effect.ttl) || 0.12)),
+      type: effect.type,
+      radius: effect.radius,
+      zombieType: effect.zombieType,
+      slowed: effect.slowed,
+      plantId: effect.plantId,
+    }));
+}
+
 export function prepareLevel(index, mode = "level", options = {}) {
   const { preserveCarryOver = false } = options;
   state.mode = mode;
@@ -226,7 +333,11 @@ export function startLevel(index, mode = state.mode) {
   state.sun = carryOver ? Math.max(0, Number(carryOver.sun) || 0) : level.startSun;
   if (carryOver) {
     state.plants = restorePlants(carryOver.plants || []);
+    state.cellStates = restoreCellStates(carryOver.cellStates || []);
     state.lawnMowers = restoreLawnMowers(carryOver.lawnMowers || []);
+    state.suns = restoreSuns(carryOver.suns || []);
+    state.projectiles = restoreProjectiles(carryOver.projectiles || []);
+    state.effects = restoreEffects(carryOver.effects || []);
     Object.keys(state.cardCooldowns).forEach((id) => {
       state.cardCooldowns[id] = Math.max(0, Number(carryOver.cardCooldowns?.[id]) || 0);
     });
@@ -258,7 +369,11 @@ export function prepareNextLevel() {
     targetLevelIndex: next,
     sun: state.sun,
     plants: snapshotCarryOverPlants(),
+    cellStates: snapshotCarryOverCellStates(),
     lawnMowers: snapshotCarryOverMowers(),
+    suns: snapshotCarryOverSuns(),
+    projectiles: snapshotCarryOverProjectiles(),
+    effects: snapshotCarryOverEffects(),
     cardCooldowns: { ...state.cardCooldowns },
   };
   prepareLevel(next, "level", { preserveCarryOver: true });
@@ -292,6 +407,7 @@ export function resumeSavedRun() {
   state.stats.plantsRemoved = Math.max(0, Number(state.savedRun.stats?.plantsRemoved) || 0);
   state.stats.projectilesFired = Math.max(0, Number(state.savedRun.stats?.projectilesFired) || 0);
   state.plants = restorePlants(state.savedRun.plants || []);
+  state.cellStates = restoreCellStates(state.savedRun.cellStates || []);
   state.zombies = restoreZombies(state.savedRun.zombies || []);
   state.projectiles = restoreProjectiles(state.savedRun.projectiles || []);
   state.suns = restoreSuns(state.savedRun.suns || []);

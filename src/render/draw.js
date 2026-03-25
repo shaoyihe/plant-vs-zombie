@@ -56,6 +56,11 @@ const QUALITY_PRESETS = {
   low: { pixelRatioCap: 1.0, shadow: false, shadowSize: 256, effectBudget: 56 },
 };
 
+const BASE_BACKGROUND = new THREE.Color(0xa5d07a);
+const DOOM_BACKGROUND = new THREE.Color(0x33263f);
+const BASE_FOG = new THREE.Color(0xa5d07a);
+const DOOM_FOG = new THREE.Color(0x3f334a);
+
 function getEffectivePreset() {
   const base = QUALITY_PRESETS[sceneState.resolvedQuality] || QUALITY_PRESETS.high;
   if (!sceneState.performanceMode) {
@@ -477,6 +482,97 @@ function createPlantObject(plant) {
     group.add(jawBottom);
     addSimpleEyes(group, 11.5, 9.4, 0.82);
     addPeaLeaves(group, 0x487c31);
+  } else if (plant.plantId === "torchwood") {
+    head = new THREE.Mesh(new THREE.CylinderGeometry(10, 12, 24, 12), makeMaterial(0x8f5b31, 0.9));
+    head.position.y = 2;
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(9.5, 2.1, 8, 18), makeMaterial(0x5f3218, 0.8));
+    rim.position.set(0, 14, 0);
+    rim.rotation.x = Math.PI / 2;
+    rim.userData.part = "rim";
+    enableShadow(rim);
+    group.add(rim);
+    const flame = new THREE.Mesh(
+      new THREE.ConeGeometry(7, 18, 10),
+      new THREE.MeshStandardMaterial({ color: 0xffa032, emissive: 0xff6a10, emissiveIntensity: 0.6, roughness: 0.3 })
+    );
+    flame.position.set(0, 24, 0);
+    flame.userData.part = "flame";
+    group.add(flame);
+  } else if (plant.plantId === "magnetshroom") {
+    head = new THREE.Mesh(new THREE.SphereGeometry(12, 14, 14), makeMaterial(0x7a6995, 0.7));
+    head.position.y = 8;
+    head.scale.set(1.1, 0.78, 1.06);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(15, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2), makeMaterial(0x8e7aae, 0.62));
+    cap.position.set(0, 16, 0);
+    cap.userData.part = "cap";
+    enableShadow(cap);
+    group.add(cap);
+    const magnet = new THREE.Mesh(new THREE.TorusGeometry(6.5, 2.1, 8, 18, Math.PI), makeMaterial(0xb43237, 0.5));
+    magnet.position.set(0, 10, 10);
+    magnet.rotation.z = Math.PI;
+    magnet.userData.part = "magnet";
+    enableShadow(magnet);
+    group.add(magnet);
+    addSimpleEyes(group, 8.8, 10.8, 0.8);
+  } else if (plant.plantId === "iceshroom") {
+    head = new THREE.Mesh(new THREE.SphereGeometry(12, 14, 14), makeMaterial(0x79badb, 0.64));
+    head.position.y = 8;
+    head.scale.set(1.08, 0.76, 1.04);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(15.5, 18, 18, 0, Math.PI * 2, 0, Math.PI / 2), makeMaterial(0xa7ddf5, 0.52));
+    cap.position.set(0, 16, 0);
+    cap.userData.part = "iceCap";
+    enableShadow(cap);
+    group.add(cap);
+    addSimpleEyes(group, 8.8, 10.4, 0.8);
+  } else if (plant.plantId === "doomshroom") {
+    head = new THREE.Mesh(new THREE.SphereGeometry(12.5, 16, 16), makeMaterial(0x5a4977, 0.68));
+    head.position.y = 8;
+    head.scale.set(1.08, 0.8, 1.08);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(17, 18, 18, 0, Math.PI * 2, 0, Math.PI / 2), makeMaterial(0x71579a, 0.54));
+    cap.position.set(0, 18, 0);
+    cap.userData.part = "doomCap";
+    enableShadow(cap);
+    group.add(cap);
+    const spots = new THREE.Mesh(new THREE.TorusGeometry(5.4, 1.2, 8, 16), makeMaterial(0xc7b6dd, 0.42));
+    spots.position.set(0, 19, 4);
+    spots.rotation.x = 1.1;
+    spots.userData.part = "doomSpots";
+    enableShadow(spots);
+    group.add(spots);
+    addSimpleEyes(group, 9, 10.8, 0.84);
+  } else if (plant.plantId === "threepeater") {
+    head = new THREE.Mesh(new THREE.SphereGeometry(11.5, 14, 14), makeMaterial(0x3da851, 0.62));
+    head.position.y = 10;
+    addSimpleEyes(group, 10.5, 10.4, 0.82);
+    const topHead = new THREE.Mesh(new THREE.SphereGeometry(10.2, 12, 12), makeMaterial(0x45ad58, 0.62));
+    const bottomHead = new THREE.Mesh(new THREE.SphereGeometry(10.2, 12, 12), makeMaterial(0x369249, 0.62));
+    topHead.position.set(0, 24, 0);
+    bottomHead.position.set(0, -4, 0);
+    topHead.userData.part = "topHead";
+    bottomHead.userData.part = "bottomHead";
+    enableShadow(topHead);
+    enableShadow(bottomHead);
+    group.add(topHead);
+    group.add(bottomHead);
+    const topMuzzle = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 4.2, 14, 12), makeMaterial(0x34853f, 0.62));
+    const midMuzzle = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 4.6, 16, 12), makeMaterial(0x34853f, 0.62));
+    const bottomMuzzle = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 4.2, 14, 12), makeMaterial(0x2f7b39, 0.62));
+    topMuzzle.rotation.z = Math.PI / 2;
+    midMuzzle.rotation.z = Math.PI / 2;
+    bottomMuzzle.rotation.z = Math.PI / 2;
+    topMuzzle.position.set(13, 24, 0);
+    midMuzzle.position.set(14, 10, 0);
+    bottomMuzzle.position.set(13, -4, 0);
+    topMuzzle.userData.part = "topMuzzle";
+    midMuzzle.userData.part = "muzzle";
+    bottomMuzzle.userData.part = "bottomMuzzle";
+    enableShadow(topMuzzle);
+    enableShadow(midMuzzle);
+    enableShadow(bottomMuzzle);
+    group.add(topMuzzle);
+    group.add(midMuzzle);
+    group.add(bottomMuzzle);
+    addPeaLeaves(group, 0x3b9342);
   } else {
     const color = plant.plantId === "snowpea" ? 0x74cae6 : def.color;
     head = new THREE.Mesh(new THREE.SphereGeometry(12, 14, 14), makeMaterial(color, 0.6));
@@ -524,6 +620,7 @@ function createZombieObject(zombie) {
   const shirt = new THREE.Mesh(new THREE.CylinderGeometry(8.5, 10.2, 28, 14), makeMaterial(0xd8d1bb, 0.76));
   shirt.position.y = 4;
   enableShadow(shirt);
+  shirt.userData.part = "shirt";
   group.add(shirt);
 
   const body = new THREE.Mesh(new THREE.CylinderGeometry(10.2, 12.6, 31, 14), makeMaterial(def.color, 0.62));
@@ -537,12 +634,14 @@ function createZombieObject(zombie) {
   shoulder.position.set(0, 17, 0);
   shoulder.scale.set(1.18, 0.82, 0.92);
   enableShadow(shoulder);
+  shoulder.userData.part = "shoulder";
   group.add(shoulder);
 
   const hip = new THREE.Mesh(new THREE.SphereGeometry(10.8, 12, 12), makeMaterial(def.color, 0.64));
   hip.position.set(0, -8, 0);
   hip.scale.set(1.06, 0.78, 0.9);
   enableShadow(hip);
+  hip.userData.part = "hip";
   group.add(hip);
 
   const coatL = new THREE.Mesh(new THREE.SphereGeometry(6.2, 10, 10), makeMaterial(def.color, 0.66));
@@ -592,6 +691,7 @@ function createZombieObject(zombie) {
   hair.position.set(-1.5, 40, 1);
   hair.rotation.z = 0.4;
   enableShadow(hair);
+  hair.userData.part = "hair";
   group.add(hair);
 
   const danceHair = new THREE.Mesh(new THREE.BoxGeometry(14, 3, 10), makeMaterial(0x22181c, 0.82));
@@ -657,6 +757,8 @@ function createZombieObject(zombie) {
   footR.scale.set(1.4, 0.5, 1.8);
   enableShadow(footL);
   enableShadow(footR);
+  footL.userData.part = "footL";
+  footR.userData.part = "footR";
   group.add(footL);
   group.add(footR);
 
@@ -741,6 +843,42 @@ function createZombieObject(zombie) {
     enableShadow(jacket);
     group.add(jacket);
   }
+  if (zombie.type === "miner") {
+    const minerHelmet = new THREE.Mesh(new THREE.CylinderGeometry(8.6, 9.4, 7, 14), makeMaterial(0x5c4630, 0.72));
+    minerHelmet.position.set(0, 40, 0.6);
+    minerHelmet.userData.part = "minerHelmet";
+    enableShadow(minerHelmet);
+    group.add(minerHelmet);
+
+    const minerLamp = new THREE.Mesh(
+      new THREE.SphereGeometry(2.4, 8, 8),
+      new THREE.MeshStandardMaterial({ color: 0xffd26a, emissive: 0xffc04a, emissiveIntensity: 0.5, roughness: 0.3 })
+    );
+    minerLamp.position.set(4.6, 40, 8.6);
+    minerLamp.userData.part = "minerLamp";
+    group.add(minerLamp);
+
+    const pickaxe = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 28, 8), makeMaterial(0x9b7a56, 0.74));
+    pickaxe.position.set(-18, 12, 0);
+    pickaxe.rotation.z = -0.55;
+    pickaxe.userData.part = "pickaxe";
+    enableShadow(pickaxe);
+    group.add(pickaxe);
+
+    const pickHead = new THREE.Mesh(new THREE.BoxGeometry(11, 2, 2), makeMaterial(0x8c9498, 0.45, 0.22));
+    pickHead.position.set(-10.5, 23, 0);
+    pickHead.rotation.z = 0.18;
+    pickHead.userData.part = "pickHead";
+    enableShadow(pickHead);
+    group.add(pickHead);
+
+    const mound = new THREE.Mesh(new THREE.SphereGeometry(12, 10, 10), makeMaterial(0x7b5b37, 0.92));
+    mound.position.set(0, -21, 0);
+    mound.scale.set(1.35, 0.38, 1.05);
+    mound.userData.part = "mound";
+    enableShadow(mound);
+    group.add(mound);
+  }
   if (zombie.type === "backup") {
     body.scale.set(0.94, 0.92, 0.88);
     shirt.material.color.setHex(0xe0ddd6);
@@ -797,9 +935,9 @@ function createProjectileObject(projectile) {
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(5.5, 10, 10),
     new THREE.MeshStandardMaterial({
-      color: projectile.slow ? 0x89ddff : 0x57bf4c,
-      emissive: projectile.slow ? 0x0a5778 : 0x1c5d1a,
-      emissiveIntensity: 0.35,
+      color: projectile.fire ? 0xff8a24 : projectile.slow ? 0x89ddff : 0x57bf4c,
+      emissive: projectile.fire ? 0xff5a00 : projectile.slow ? 0x0a5778 : 0x1c5d1a,
+      emissiveIntensity: projectile.fire ? 0.55 : 0.35,
       roughness: 0.4,
       metalness: 0.02,
     })
@@ -887,6 +1025,7 @@ function updateHoverPreview() {
   const centerX = BOARD_X + hover.col * CELL_W + CELL_W / 2;
   const centerY = BOARD_Y + hover.row * CELL_H + CELL_H / 2;
   const hasPlant = Boolean(state.plants[hover.row]?.[hover.col]);
+  const blocked = Boolean(hover.blockedType);
   hoverTile.visible = true;
   hoverTile.position.set(toWorldX(centerX), 0.5, toWorldY(centerY));
 
@@ -896,13 +1035,13 @@ function updateHoverPreview() {
     tileColor = hasPlant ? 0xe46a58 : 0x8a5a52;
     tileOpacity = hasPlant ? 0.34 : 0.18;
   } else if (state.selectedPlant) {
-    tileColor = hasPlant ? 0xd7765b : 0x9de27b;
-    tileOpacity = hasPlant ? 0.22 : 0.3;
+    tileColor = hasPlant || blocked ? 0xd7765b : 0x9de27b;
+    tileOpacity = hasPlant || blocked ? 0.22 : 0.3;
   }
   hoverTile.material.color.setHex(tileColor);
   hoverTile.material.opacity = tileOpacity;
 
-  if (!state.selectedPlant || state.shovelMode || hasPlant) {
+  if (!state.selectedPlant || state.shovelMode || hasPlant || blocked) {
     if (group.userData.previewPlant) {
       group.remove(group.userData.previewPlant);
       group.userData.previewPlant = null;
@@ -998,6 +1137,17 @@ function updatePlantObject(plant, obj) {
   const sproutB = obj.children.find((child) => child.userData.part === "sproutB");
   const jawTop = obj.children.find((child) => child.userData.part === "jawTop");
   const jawBottom = obj.children.find((child) => child.userData.part === "jawBottom");
+  const flame = obj.children.find((child) => child.userData.part === "flame");
+  const rim = obj.children.find((child) => child.userData.part === "rim");
+  const magnet = obj.children.find((child) => child.userData.part === "magnet");
+  const cap = obj.children.find((child) => child.userData.part === "cap");
+  const iceCap = obj.children.find((child) => child.userData.part === "iceCap");
+  const doomCap = obj.children.find((child) => child.userData.part === "doomCap");
+  const doomSpots = obj.children.find((child) => child.userData.part === "doomSpots");
+  const topHead = obj.children.find((child) => child.userData.part === "topHead");
+  const bottomHead = obj.children.find((child) => child.userData.part === "bottomHead");
+  const topMuzzle = obj.children.find((child) => child.userData.part === "topMuzzle");
+  const bottomMuzzle = obj.children.find((child) => child.userData.part === "bottomMuzzle");
   if (head) {
     const nod = plant.action === "attack" ? -0.3 : plant.action === "hurt" ? 0.22 : 0;
     head.rotation.z = nod + wobble * 2.2;
@@ -1022,6 +1172,23 @@ function updatePlantObject(plant, obj) {
       head.rotation.y = plant.action === "attack" ? -0.28 : 0;
       head.position.y = plant.action === "digest" ? 8.1 + Math.sin((state.levelTime || 0) * 3.5 + (plant.animSeed || 0)) * 0.5 : 10;
       head.scale.set(1.06 + digestRatio * 0.08, plant.action === "digest" ? 0.92 + digestRatio * 0.08 : 1, 1.02 + digestRatio * 0.06);
+    }
+    if (plant.plantId === "torchwood") {
+      head.position.y = 2 + Math.sin((state.levelTime || 0) * 2.2 + (plant.animSeed || 0)) * 0.25;
+    }
+    if (plant.plantId === "magnetshroom") {
+      head.position.y = 8 + Math.sin((state.levelTime || 0) * 2.1 + (plant.animSeed || 0)) * 0.35;
+    }
+    if (plant.plantId === "iceshroom") {
+      head.position.y = 8 + Math.sin((state.levelTime || 0) * 1.9 + (plant.animSeed || 0)) * 0.25;
+      head.scale.set(1.08, plant.action === "idle" ? 0.76 : 0.7, 1.04);
+    }
+    if (plant.plantId === "doomshroom") {
+      head.position.y = 8 + Math.sin((state.levelTime || 0) * 1.4 + (plant.animSeed || 0)) * 0.3;
+      head.scale.set(1.08, plant.action === "idle" ? 0.8 : 0.72, 1.08);
+    }
+    if (plant.plantId === "threepeater") {
+      head.position.y = 10 + Math.sin((state.levelTime || 0) * 3.2 + (plant.animSeed || 0)) * 0.6;
     }
   }
   if (stem) {
@@ -1065,6 +1232,48 @@ function updatePlantObject(plant, obj) {
     jawBottom.rotation.z = plant.action === "attack" ? 0.16 : 0;
     jawBottom.rotation.x = plant.action === "attack" ? 0.52 : plant.action === "digest" ? 0.12 + digestRatio * 0.1 : 0.05;
     jawBottom.position.y = plant.action === "attack" ? 5.2 : plant.action === "digest" ? 5.7 - Math.sin((state.levelTime || 0) * 3 + (plant.animSeed || 0)) * 0.25 : 6;
+  }
+  if (flame) {
+    flame.scale.set(
+      1 + Math.sin((state.levelTime || 0) * 9 + (plant.animSeed || 0)) * 0.12,
+      1 + Math.sin((state.levelTime || 0) * 12 + (plant.animSeed || 0)) * 0.18,
+      1
+    );
+    flame.position.y = 24 + Math.sin((state.levelTime || 0) * 8 + (plant.animSeed || 0)) * 1.6;
+  }
+  if (rim) {
+    rim.rotation.z = Math.sin((state.levelTime || 0) * 2 + (plant.animSeed || 0)) * 0.04;
+  }
+  if (magnet) {
+    magnet.rotation.z = Math.PI + Math.sin((state.levelTime || 0) * 2.5 + (plant.animSeed || 0)) * 0.08;
+    magnet.position.z = plant.action === "attack" ? 13 : 10;
+  }
+  if (cap) {
+    cap.position.y = 16 + Math.sin((state.levelTime || 0) * 2.4 + (plant.animSeed || 0)) * 0.4;
+  }
+  if (iceCap) {
+    iceCap.position.y = 16 + Math.sin((state.levelTime || 0) * 2.1 + (plant.animSeed || 0)) * 0.3;
+    iceCap.scale.set(1, 1 + Math.sin((state.levelTime || 0) * 3.6 + (plant.animSeed || 0)) * 0.03, 1);
+  }
+  if (doomCap) {
+    doomCap.position.y = 18 + Math.sin((state.levelTime || 0) * 1.6 + (plant.animSeed || 0)) * 0.28;
+  }
+  if (doomSpots) {
+    doomSpots.rotation.z = Math.sin((state.levelTime || 0) * 1.5 + (plant.animSeed || 0)) * 0.08;
+  }
+  if (topHead) {
+    topHead.position.y = 24 + Math.sin((state.levelTime || 0) * 3 + (plant.animSeed || 0)) * 0.8;
+    topHead.rotation.z = wobble * 1.8;
+  }
+  if (bottomHead) {
+    bottomHead.position.y = -4 + Math.sin((state.levelTime || 0) * 3.4 + (plant.animSeed || 0)) * 0.8;
+    bottomHead.rotation.z = wobble * 1.6;
+  }
+  if (topMuzzle) {
+    topMuzzle.scale.set(plant.action === "attack" ? 1.14 : 1, 1, 1);
+  }
+  if (bottomMuzzle) {
+    bottomMuzzle.scale.set(plant.action === "attack" ? 1.14 : 1, 1, 1);
   }
 
   obj.traverse((child) => {
@@ -1118,15 +1327,24 @@ function updateZombieObject(zombie, obj) {
   const gloveR = obj.children.find((child) => child.userData.part === "gloveR");
   const jacket = obj.children.find((child) => child.userData.part === "jacket");
   const vest = obj.children.find((child) => child.userData.part === "vest");
+  const minerHelmet = obj.children.find((child) => child.userData.part === "minerHelmet");
+  const minerLamp = obj.children.find((child) => child.userData.part === "minerLamp");
+  const pickaxe = obj.children.find((child) => child.userData.part === "pickaxe");
+  const pickHead = obj.children.find((child) => child.userData.part === "pickHead");
+  const mound = obj.children.find((child) => child.userData.part === "mound");
   const hpRatio = zombie.hp / Math.max(1, zombie.maxHp);
   const isBiting = zombie.action === "bite";
   const isHurt = zombie.action === "hurt";
   const isSummoning = zombie.action === "summon";
+  const isUnderground = Boolean(zombie.underground);
 
   if (armL) {
     armL.rotation.z = isSummoning ? -0.95 : phase * 0.35;
     armL.rotation.x = isSummoning ? 0.8 : 0.2 + Math.abs(secondaryPhase) * (isBiting ? 0.42 : 0.22);
     armL.position.y = 5.5 - Math.abs(phase) * 1.4;
+  }
+  if (isUnderground) {
+    obj.position.y = -8 + zombie.row * 0.12;
   }
   if (armR) {
     armR.rotation.z = isSummoning ? 0.95 : -phase * 0.35;
@@ -1225,7 +1443,7 @@ function updateZombieObject(zombie, obj) {
     helmet.position.y = 30.5 + Math.abs(phase) * 0.4;
     helmet.position.z = 1.4 + (head ? head.position.z * 0.22 : 0);
     helmet.rotation.z = head ? head.rotation.z * 0.55 : 0;
-    helmet.visible = hpRatio > 0.42;
+    helmet.visible = hpRatio > 0.42 && !zombie.propDropState.helmetDropped;
   }
   if (helmetVisor) {
     helmetVisor.visible = hpRatio > 0.42;
@@ -1255,10 +1473,72 @@ function updateZombieObject(zombie, obj) {
   if (vest) {
     vest.rotation.z = phase * 0.04;
   }
+  if (minerHelmet) {
+    minerHelmet.visible = !isUnderground && !zombie.propDropState.minerHelmetDropped;
+    minerHelmet.rotation.z = phase * 0.03;
+  }
+  if (minerLamp) {
+    minerLamp.visible = !isUnderground && !zombie.propDropState.minerHelmetDropped;
+  }
+  if (pickaxe) {
+    pickaxe.visible = !isUnderground;
+    pickaxe.rotation.z = isBiting ? -0.2 : -0.55 + phase * 0.04;
+  }
+  if (pickHead) {
+    pickHead.visible = !isUnderground;
+    pickHead.rotation.z = isBiting ? 0.38 : 0.18;
+  }
+  if (mound) {
+    mound.visible = isUnderground;
+    mound.scale.y = 0.32 + Math.abs(phase) * 0.08;
+  }
 
   obj.traverse((child) => {
     if (child.userData.shield) {
       child.visible = zombie.shieldHp > 0;
+    }
+    if (
+      isUnderground &&
+      [
+        "body",
+        "shirt",
+        "shoulder",
+        "hip",
+        "head",
+        "jaw",
+        "teeth",
+        "nose",
+        "hair",
+        "armL",
+        "armR",
+        "legL",
+        "legR",
+        "footL",
+        "footR",
+        "handL",
+        "handR",
+        "sleeveL",
+        "sleeveR",
+        "coatL",
+        "coatR",
+        "tie",
+        "danceHair",
+        "gloveL",
+        "gloveR",
+        "jacket",
+        "vest",
+        "cone",
+        "bucket",
+        "paper",
+        "pole",
+        "flagPole",
+        "flagCloth",
+        "helmet",
+        "helmetVisor",
+        "pads",
+      ].includes(child.userData.part)
+    ) {
+      child.visible = false;
     }
     if (child.isMesh && child.material) {
       if (supportsEmissive(child.material)) {
@@ -1278,6 +1558,13 @@ function updateProjectileObject(projectile, obj) {
   const pulse = 1 + Math.sin((state.levelTime || 0) * 18 + (projectile.x % 11)) * 0.1;
   obj.position.set(toWorldX(projectile.x), 16 + projectile.row * 0.12, toWorldY(projectile.y));
   obj.scale.set(pulse, pulse, pulse);
+  if (obj.material) {
+    obj.material.color.setHex(projectile.fire ? 0xff8a24 : projectile.slow ? 0x89ddff : 0x57bf4c);
+    if (supportsEmissive(obj.material)) {
+      obj.material.emissive.setHex(projectile.fire ? 0xff5a00 : projectile.slow ? 0x0a5778 : 0x1c5d1a);
+      obj.material.emissiveIntensity = projectile.fire ? 0.55 : 0.35;
+    }
+  }
 }
 
 function updateSunObject(sun, obj) {
@@ -1296,6 +1583,54 @@ function rebuildEffects() {
 
   const budget = getEffectivePreset().effectBudget;
   const visibleEffects = state.effects.slice(-budget);
+  state.cellStates.forEach((row, rowIndex) => {
+    row.forEach((cellState, colIndex) => {
+      if (!cellState || cellState.type !== "crater") {
+        return;
+      }
+      const maxTtl = Math.max(0.05, cellState.maxTtl || cellState.ttl || 1);
+      const craterRatio = Math.max(0, Math.min(1, cellState.ttl / maxTtl));
+      const craterRadius = Math.max(10, CELL_W * (0.28 + craterRatio * 0.12));
+      const craterColor = new THREE.Color(0x5a4632).lerp(new THREE.Color(0x22151b), craterRatio * 0.9);
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(craterRadius, Math.max(13, craterRadius * 1.18), 2.6, 18),
+        new THREE.MeshStandardMaterial({ color: craterColor, roughness: 0.95, metalness: 0.0 })
+      );
+      mesh.position.set(
+        toWorldX(BOARD_X + colIndex * CELL_W + CELL_W / 2),
+        -1.6 - craterRatio * 0.45,
+        toWorldY(BOARD_Y + rowIndex * CELL_H + CELL_H / 2)
+      );
+      mesh.scale.set(1, 1, 1 + Math.sin((state.levelTime || 0) * 1.2 + rowIndex + colIndex) * 0.02);
+      group.add(mesh);
+
+      const rim = new THREE.Mesh(
+        new THREE.TorusGeometry(Math.max(12, craterRadius * 1.02), 1.5 + craterRatio * 0.9, 10, 28),
+        new THREE.MeshBasicMaterial({ color: craterRatio > 0.45 ? 0x1d1116 : 0x6b5642, transparent: true, opacity: 0.35 + craterRatio * 0.25 })
+      );
+      rim.position.set(
+        toWorldX(BOARD_X + colIndex * CELL_W + CELL_W / 2),
+        -0.15,
+        toWorldY(BOARD_Y + rowIndex * CELL_H + CELL_H / 2)
+      );
+      rim.rotation.x = Math.PI / 2;
+      group.add(rim);
+
+      if (craterRatio > 0.55) {
+        const smoke = new THREE.Mesh(
+          new THREE.SphereGeometry(7.5 + craterRatio * 5, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0x463a43, transparent: true, opacity: 0.12 + craterRatio * 0.16 })
+        );
+        smoke.position.set(
+          toWorldX(BOARD_X + colIndex * CELL_W + CELL_W / 2 + Math.sin((state.levelTime || 0) * 0.9 + rowIndex) * 4),
+          7 + Math.sin((state.levelTime || 0) * 1.2 + colIndex) * 2,
+          toWorldY(BOARD_Y + rowIndex * CELL_H + CELL_H / 2 + Math.cos((state.levelTime || 0) * 0.7 + colIndex) * 3)
+        );
+        smoke.scale.set(1.1, 0.72, 1.1);
+        group.add(smoke);
+      }
+    });
+  });
   visibleEffects.forEach((effect) => {
     if (effect.type === "dust") {
       const mesh = new THREE.Mesh(
@@ -1313,6 +1648,63 @@ function rebuildEffects() {
         new THREE.MeshBasicMaterial({ color: 0xef6438, transparent: true, opacity: Math.max(0, effect.ttl * 1.5) })
       );
       mesh.position.set(toWorldX(effect.x), 12, toWorldY(effect.y));
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "ice-wave") {
+      const mesh = new THREE.Mesh(
+        new THREE.TorusGeometry(Math.max(24, (effect.radius || 140) * 0.12), 3.4, 10, 28),
+        new THREE.MeshBasicMaterial({ color: 0xa6e6ff, transparent: true, opacity: Math.max(0, effect.ttl * 1.5) })
+      );
+      mesh.position.set(toWorldX(effect.x), 8, toWorldY(effect.y));
+      mesh.rotation.x = Math.PI / 2;
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "doom-blast") {
+      const mesh = new THREE.Mesh(
+        new THREE.TorusGeometry(Math.max(32, (effect.radius || 180) * 0.12), 6.2, 12, 30),
+        new THREE.MeshBasicMaterial({ color: 0x9f78d0, transparent: true, opacity: Math.max(0, effect.ttl * 1.6) })
+      );
+      mesh.position.set(toWorldX(effect.x), 10, toWorldY(effect.y));
+      mesh.rotation.x = Math.PI / 2;
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "doom-smoke") {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(Math.max(8, (effect.size || 16) * 0.52), 10, 10),
+        new THREE.MeshBasicMaterial({ color: 0x493a4f, transparent: true, opacity: Math.max(0, effect.ttl * 0.34) })
+      );
+      mesh.position.set(toWorldX(effect.x), 10 + (effect.rise || 0), toWorldY(effect.y));
+      mesh.scale.set(1.08, 0.86, 1.08);
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "doom-heat") {
+      const heatRadius = Math.max(26, (effect.radius || 160) * (1.1 - effect.ttl / 1.15) * 0.18 + 18);
+      const mesh = new THREE.Mesh(
+        new THREE.TorusGeometry(heatRadius, 2.4, 10, 28),
+        new THREE.MeshBasicMaterial({ color: 0xf28c54, transparent: true, opacity: Math.max(0, effect.ttl * 0.3) })
+      );
+      mesh.position.set(toWorldX(effect.x), 1.4, toWorldY(effect.y));
+      mesh.rotation.x = Math.PI / 2;
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "doom-edge") {
+      const pulse = 1 + (1 - effect.ttl / 1.55) * 0.18;
+      const mesh = new THREE.Mesh(
+        new THREE.TorusGeometry(Math.max(30, (effect.radius || 145) * 0.14) * pulse, 1.8, 10, 26),
+        new THREE.MeshBasicMaterial({ color: 0x2f171d, transparent: true, opacity: Math.max(0, effect.ttl * 0.22) })
+      );
+      mesh.position.set(toWorldX(effect.x), 0.8, toWorldY(effect.y));
+      mesh.rotation.x = Math.PI / 2;
       group.add(mesh);
       return;
     }
@@ -1373,6 +1765,27 @@ function rebuildEffects() {
       return;
     }
 
+    if (effect.type === "miner-warning") {
+      const mesh = new THREE.Mesh(
+        new THREE.TorusGeometry(11, 1.8, 8, 22),
+        new THREE.MeshBasicMaterial({ color: 0xd7b15c, transparent: true, opacity: Math.max(0, effect.ttl * 1.4) })
+      );
+      mesh.position.set(toWorldX(effect.x), 2, toWorldY(effect.y));
+      mesh.rotation.x = Math.PI / 2;
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "magnet-pull") {
+      const mesh = new THREE.Mesh(
+        new THREE.TorusGeometry(7, 1.2, 8, 18),
+        new THREE.MeshBasicMaterial({ color: 0xb93e46, transparent: true, opacity: Math.max(0, effect.ttl * 1.8) })
+      );
+      mesh.position.set(toWorldX(effect.x), 10, toWorldY(effect.y));
+      group.add(mesh);
+      return;
+    }
+
     if (effect.type === "pole-drop") {
       const mesh = new THREE.Mesh(
         new THREE.CylinderGeometry(1.1, 1.1, 48, 8),
@@ -1404,8 +1817,8 @@ function rebuildEffects() {
       return;
     }
 
-    if (effect.type === "hit" || effect.type === "ice-hit" || effect.type === "shield-hit") {
-      const color = effect.type === "ice-hit" ? 0xa7e9ff : effect.type === "shield-hit" ? 0xdaebf1 : 0xffefb2;
+    if (effect.type === "hit" || effect.type === "ice-hit" || effect.type === "shield-hit" || effect.type === "fire-hit") {
+      const color = effect.type === "ice-hit" ? 0xa7e9ff : effect.type === "shield-hit" ? 0xdaebf1 : effect.type === "fire-hit" ? 0xff9d42 : 0xffefb2;
       const mesh = new THREE.Mesh(
         new THREE.TorusGeometry(5, 1.2, 8, 16),
         new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 })
@@ -1420,6 +1833,16 @@ function updateCameraAndShake() {
   if (state.stats.kills > sceneState.lastKillCount) {
     sceneState.shake = Math.min(1, sceneState.shake + 0.42);
     sceneState.lastKillCount = state.stats.kills;
+  }
+
+  const doomPulse = state.effects.reduce((maxValue, effect) => {
+    if (effect.type !== "doom-blast") {
+      return maxValue;
+    }
+    return Math.max(maxValue, Math.max(0, effect.ttl / 0.58));
+  }, 0);
+  if (doomPulse > 0) {
+    sceneState.shake = Math.min(1.6, sceneState.shake + doomPulse * 0.42);
   }
 
   const current = sceneState.cameraCurrent;
@@ -1576,6 +1999,19 @@ export function draw() {
   rebuildEffects();
   updateHoverPreview();
   updateCameraAndShake();
+
+  const doomPulse = state.effects.reduce((maxValue, effect) => {
+    if (effect.type !== "doom-blast") {
+      return maxValue;
+    }
+    return Math.max(maxValue, Math.max(0, effect.ttl / 0.58));
+  }, 0);
+  const sceneFlash = Math.min(1, doomPulse * 0.9);
+  sceneState.scene.background.copy(BASE_BACKGROUND).lerp(DOOM_BACKGROUND, sceneFlash * 0.72);
+  if (sceneState.scene.fog) {
+    sceneState.scene.fog.color.copy(BASE_FOG).lerp(DOOM_FOG, sceneFlash * 0.68);
+  }
+  sceneState.renderer.toneMappingExposure = (sceneState.resolvedQuality === "low" ? 0.95 : 1.02) - sceneFlash * 0.24;
 
   sceneState.renderer.render(sceneState.scene, sceneState.camera);
 }
