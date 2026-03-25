@@ -1,0 +1,1581 @@
+import { BOARD_H, BOARD_W, BOARD_X, BOARD_Y, CELL_H, CELL_W, HOUSE_LINE_X } from "../config/constants.js";
+import { PLANTS } from "../config/plants.js";
+import { ZOMBIES } from "../config/zombies.js";
+import { state } from "../core/state.js";
+import { ui } from "../ui/dom.js";
+import * as THREE from "../../assets/vendor/three.module.min.js";
+
+const sceneState = {
+  ready: false,
+  renderer: null,
+  scene: null,
+  camera: null,
+  root: null,
+  groups: {
+    mowers: null,
+    plants: null,
+    zombies: null,
+    projectiles: null,
+    suns: null,
+    effects: null,
+    preview: null,
+  },
+  maps: {
+    mowers: new Map(),
+    plants: new Map(),
+    zombies: new Map(),
+    projectiles: new Map(),
+    suns: new Map(),
+  },
+  lastCanvasW: 0,
+  lastCanvasH: 0,
+  cameraMode: "default",
+  cameraCurrent: { x: 0, y: 270, z: 860, lookY: -20 },
+  cameraTarget: { x: 0, y: 270, z: 860, lookY: -20 },
+  shake: 0,
+  lastKillCount: 0,
+  quality: "auto",
+  resolvedQuality: "high",
+  frameSampleMs: 16,
+  lastFrameAt: 0,
+  autoAdjustTimer: 0,
+  keyLight: null,
+  performanceMode: false,
+  initFailed: false,
+  initError: "",
+};
+
+const CAMERA_PRESETS = {
+  default: { x: 0, y: 520, z: 560, lookY: -32 },
+  close: { x: 0, y: 360, z: 390, lookY: -22 },
+};
+
+const QUALITY_PRESETS = {
+  high: { pixelRatioCap: 1.75, shadow: true, shadowSize: 1024, effectBudget: 140 },
+  medium: { pixelRatioCap: 1.25, shadow: true, shadowSize: 512, effectBudget: 90 },
+  low: { pixelRatioCap: 1.0, shadow: false, shadowSize: 256, effectBudget: 56 },
+};
+
+function getEffectivePreset() {
+  const base = QUALITY_PRESETS[sceneState.resolvedQuality] || QUALITY_PRESETS.high;
+  if (!sceneState.performanceMode) {
+    return base;
+  }
+  return {
+    pixelRatioCap: Math.min(1.0, base.pixelRatioCap),
+    shadow: false,
+    shadowSize: 256,
+    effectBudget: Math.max(34, Math.floor(base.effectBudget * 0.55)),
+  };
+}
+
+function toWorldX(x) {
+  return x - ui.canvas.width / 2;
+}
+
+function toWorldY(y) {
+  return ui.canvas.height / 2 - y;
+}
+
+function toScreenX(worldX) {
+  return worldX + ui.canvas.width / 2;
+}
+
+function toScreenY(worldZ) {
+  return ui.canvas.height / 2 - worldZ;
+}
+
+function resizeRendererIfNeeded() {
+  if (!sceneState.ready) {
+    return;
+  }
+  const { renderer, camera } = sceneState;
+  if (ui.canvas.width === sceneState.lastCanvasW && ui.canvas.height === sceneState.lastCanvasH) {
+    return;
+  }
+  sceneState.lastCanvasW = ui.canvas.width;
+  sceneState.lastCanvasH = ui.canvas.height;
+  renderer.setSize(ui.canvas.width, ui.canvas.height, false);
+  camera.aspect = ui.canvas.width / ui.canvas.height;
+  camera.updateProjectionMatrix();
+}
+
+function applyResolvedQuality() {
+  if (!sceneState.ready) {
+    return;
+  }
+  const preset = getEffectivePreset();
+  sceneState.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, preset.pixelRatioCap));
+  sceneState.renderer.shadowMap.enabled = preset.shadow;
+  if (sceneState.keyLight) {
+    sceneState.keyLight.castShadow = preset.shadow;
+    sceneState.keyLight.shadow.mapSize.width = preset.shadowSize;
+    sceneState.keyLight.shadow.mapSize.height = preset.shadowSize;
+    sceneState.keyLight.shadow.needsUpdate = true;
+  }
+  sceneState.renderer.toneMappingExposure = sceneState.resolvedQuality === "low" ? 0.95 : 1.02;
+  resizeRendererIfNeeded();
+}
+
+function resolveAutoQualityByFrameTime() {
+  if (sceneState.quality !== "auto") {
+    return;
+  }
+  sceneState.autoAdjustTimer += 1;
+  if (sceneState.autoAdjustTimer < 60) {
+    return;
+  }
+  sceneState.autoAdjustTimer = 0;
+  const ms = sceneState.frameSampleMs;
+  const prev = sceneState.resolvedQuality;
+  if (ms > 29) {
+    sceneState.resolvedQuality = "low";
+  } else if (ms > 22) {
+    sceneState.resolvedQuality = "medium";
+  } else {
+    sceneState.resolvedQuality = "high";
+  }
+  if (sceneState.resolvedQuality !== prev) {
+    applyResolvedQuality();
+  }
+}
+
+function makeMaterial(baseColor, roughness = 0.65, metalness = 0.05) {
+  return new THREE.MeshStandardMaterial({ color: baseColor, roughness, metalness });
+}
+
+function supportsEmissive(material) {
+  return Boolean(material && material.emissive && typeof material.emissive.setHex === "function");
+}
+
+function enableShadow(mesh, receive = false) {
+  mesh.castShadow = true;
+  mesh.receiveShadow = receive;
+}
+
+function makeLawnTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return null;
+  }
+
+  ctx.fillStyle = "#6ca44b";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let y = 0; y < 512; y += 64) {
+    ctx.fillStyle = (y / 64) % 2 === 0 ? "#74ad51" : "#679d47";
+    ctx.fillRect(0, y, 512, 64);
+  }
+
+  for (let y = 0; y < 512; y += 12) {
+    ctx.strokeStyle = "rgba(40, 75, 30, 0.13)";
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(512, y + ((y / 12) % 2 === 0 ? 2 : -2));
+    ctx.stroke();
+  }
+
+  for (let x = 0; x < 512; x += 8) {
+    ctx.fillStyle = "rgba(255,255,255,0.02)";
+    ctx.fillRect(x, 0, 1, 512);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2.6, 1.7);
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function addSimpleEyes(group, y, z = 9.8, scale = 1) {
+  const eyeMat = makeMaterial(0xffffff, 0.35);
+  const pupilMat = makeMaterial(0x131313, 0.45);
+  const leftEye = new THREE.Mesh(new THREE.SphereGeometry(1.8 * scale, 8, 8), eyeMat);
+  const rightEye = new THREE.Mesh(new THREE.SphereGeometry(1.8 * scale, 8, 8), eyeMat);
+  const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.72 * scale, 8, 8), pupilMat);
+  const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(0.72 * scale, 8, 8), pupilMat);
+
+  leftEye.position.set(-3.8 * scale, y, z);
+  rightEye.position.set(3.8 * scale, y, z);
+  leftPupil.position.set(-3.5 * scale, y - 0.2 * scale, z + 1.1 * scale);
+  rightPupil.position.set(3.5 * scale, y - 0.2 * scale, z + 1.1 * scale);
+
+  enableShadow(leftEye);
+  enableShadow(rightEye);
+  group.add(leftEye);
+  group.add(rightEye);
+  group.add(leftPupil);
+  group.add(rightPupil);
+}
+
+function addPeaLeaves(group, tint = 0x3f963a) {
+  const leafMat = makeMaterial(tint, 0.82);
+  const leafA = new THREE.Mesh(new THREE.SphereGeometry(5.5, 10, 10, 0, Math.PI), leafMat);
+  const leafB = new THREE.Mesh(new THREE.SphereGeometry(5.2, 10, 10, 0, Math.PI), leafMat);
+  leafA.rotation.set(Math.PI / 2.35, -0.65, 0.2);
+  leafB.rotation.set(Math.PI / 2.15, 0.65, -0.2);
+  leafA.position.set(-6, -7, -3);
+  leafB.position.set(6, -7, -3);
+  enableShadow(leafA);
+  enableShadow(leafB);
+  group.add(leafA);
+  group.add(leafB);
+}
+
+function buildStaticWorld() {
+  const lawnTexture = makeLawnTexture();
+
+  const board = new THREE.Mesh(
+    new THREE.BoxGeometry(BOARD_W + 22, 26, BOARD_H + 14),
+    new THREE.MeshStandardMaterial({
+      color: 0x88bf5f,
+      roughness: 0.86,
+      metalness: 0.0,
+      map: lawnTexture || null,
+    })
+  );
+  enableShadow(board, true);
+  board.position.set(toWorldX(BOARD_X + BOARD_W / 2), -18, toWorldY(BOARD_Y + BOARD_H / 2));
+  sceneState.root.add(board);
+
+  for (let row = 0; row < 5; row += 1) {
+    for (let col = 0; col < 9; col += 1) {
+      const tile = new THREE.Mesh(
+        new THREE.BoxGeometry(CELL_W - 4, 2.4, CELL_H - 4),
+        new THREE.MeshStandardMaterial({
+          color: (row + col) % 2 === 0 ? 0x80b85a : 0x71a84d,
+          roughness: 0.94,
+          metalness: 0,
+        })
+      );
+      tile.position.set(
+        toWorldX(BOARD_X + col * CELL_W + CELL_W / 2),
+        -3,
+        toWorldY(BOARD_Y + row * CELL_H + CELL_H / 2)
+      );
+      tile.receiveShadow = true;
+      sceneState.root.add(tile);
+
+      const tileFrame = new THREE.Mesh(
+        new THREE.BoxGeometry(CELL_W - 2, 0.6, CELL_H - 2),
+        new THREE.MeshBasicMaterial({ color: 0x375d26, transparent: true, opacity: 0.22 })
+      );
+      tileFrame.position.set(
+        toWorldX(BOARD_X + col * CELL_W + CELL_W / 2),
+        -1.5,
+        toWorldY(BOARD_Y + row * CELL_H + CELL_H / 2)
+      );
+      sceneState.root.add(tileFrame);
+    }
+  }
+
+  const leftPath = new THREE.Mesh(
+    new THREE.BoxGeometry(BOARD_X - 8, 18, BOARD_H + 30),
+    makeMaterial(0xcbb185, 0.95, 0.0)
+  );
+  enableShadow(leftPath, true);
+  leftPath.position.set(toWorldX((BOARD_X - 8) / 2), -14, toWorldY(BOARD_Y + BOARD_H / 2));
+  sceneState.root.add(leftPath);
+
+  const houseLine = new THREE.Mesh(
+    new THREE.BoxGeometry(6, 24, BOARD_H + 16),
+    makeMaterial(0x6b3b1a, 0.7, 0.0)
+  );
+  enableShadow(houseLine, true);
+  houseLine.position.set(toWorldX(HOUSE_LINE_X), -10, toWorldY(BOARD_Y + BOARD_H / 2));
+  sceneState.root.add(houseLine);
+
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(ui.canvas.width + 120, ui.canvas.height + 80),
+    new THREE.MeshStandardMaterial({ color: 0x6f9e4c, roughness: 0.98, metalness: 0 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(0, -32, -32);
+  floor.receiveShadow = true;
+  sceneState.root.add(floor);
+
+  const gridMaterial = new THREE.LineBasicMaterial({ color: 0x2e5b2e, transparent: true, opacity: 0.35 });
+  const points = [];
+  for (let c = 0; c <= 9; c += 1) {
+    const x = BOARD_X + c * CELL_W;
+    points.push(new THREE.Vector3(toWorldX(x), -4, toWorldY(BOARD_Y)));
+    points.push(new THREE.Vector3(toWorldX(x), -4, toWorldY(BOARD_Y + BOARD_H)));
+  }
+  for (let r = 0; r <= 5; r += 1) {
+    const y = BOARD_Y + r * CELL_H;
+    points.push(new THREE.Vector3(toWorldX(BOARD_X), -4, toWorldY(y)));
+    points.push(new THREE.Vector3(toWorldX(BOARD_X + BOARD_W), -4, toWorldY(y)));
+  }
+  const grid = new THREE.BufferGeometry().setFromPoints(points);
+  const lines = new THREE.LineSegments(grid, gridMaterial);
+  sceneState.root.add(lines);
+
+  const houseWall = new THREE.Mesh(
+    new THREE.BoxGeometry(34, 120, BOARD_H + 48),
+    makeMaterial(0xc8a77a, 0.92)
+  );
+  houseWall.position.set(toWorldX(HOUSE_LINE_X - 24), 34, toWorldY(BOARD_Y + BOARD_H / 2));
+  enableShadow(houseWall, true);
+  sceneState.root.add(houseWall);
+
+  const roofShadow = new THREE.Mesh(
+    new THREE.PlaneGeometry(140, BOARD_H + 44),
+    new THREE.MeshBasicMaterial({ color: 0x2e281f, transparent: true, opacity: 0.12 })
+  );
+  roofShadow.rotation.x = -Math.PI / 2;
+  roofShadow.position.set(toWorldX(HOUSE_LINE_X + 42), -2.6, toWorldY(BOARD_Y + BOARD_H / 2));
+  sceneState.root.add(roofShadow);
+
+  for (let i = 0; i < 3; i += 1) {
+    const cloud = new THREE.Group();
+    for (let j = 0; j < 4; j += 1) {
+      const puff = new THREE.Mesh(
+        new THREE.SphereGeometry(16 - j, 10, 10),
+        new THREE.MeshBasicMaterial({ color: 0xf9fff6, transparent: true, opacity: 0.22 })
+      );
+      puff.position.set(j * 14, (j % 2) * 6, (j % 3) * 4);
+      cloud.add(puff);
+    }
+    cloud.position.set(-280 + i * 210, 180 + i * 10, -220 - i * 26);
+    cloud.rotation.y = 0.4;
+    sceneState.root.add(cloud);
+  }
+}
+
+function createPlantObject(plant) {
+  const def = PLANTS[plant.plantId];
+  const group = new THREE.Group();
+
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 4.2, 20, 8), makeMaterial(0x3d8f3a, 0.8));
+  stem.position.y = -2;
+  enableShadow(stem);
+  stem.userData.part = "stem";
+  group.add(stem);
+
+  let head;
+  if (plant.plantId === "sunflower") {
+    const core = new THREE.Mesh(new THREE.SphereGeometry(9.2, 14, 14), makeMaterial(0x8a5a2f, 0.75));
+    core.position.y = 10;
+    head = core;
+    for (let i = 0; i < 12; i += 1) {
+      const petal = new THREE.Mesh(new THREE.SphereGeometry(4.3, 8, 8), makeMaterial(0xf4cb4e, 0.55));
+      const a = (i / 12) * Math.PI * 2;
+      petal.position.set(Math.cos(a) * 11.2, 10 + Math.sin(a) * 11.2, -1.8);
+      enableShadow(petal);
+      group.add(petal);
+    }
+    addSimpleEyes(group, 11.2, 9.2, 0.82);
+  } else if (plant.plantId === "wallnut") {
+    head = new THREE.Mesh(new THREE.BoxGeometry(30, 38, 24), makeMaterial(0xaa7642, 0.9));
+    head.position.y = 8;
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(15, 1.6, 1.2), makeMaterial(0x5b3419, 0.7));
+    brow.position.set(0, 13, 12.8);
+    group.add(brow);
+    const crackA = new THREE.Mesh(new THREE.BoxGeometry(1.4, 18, 1.2), makeMaterial(0x583015, 0.8));
+    const crackB = new THREE.Mesh(new THREE.BoxGeometry(1.2, 12, 1.2), makeMaterial(0x583015, 0.8));
+    crackA.position.set(-4, 6, 12.7);
+    crackB.position.set(5, -1, 12.7);
+    crackA.rotation.z = 0.3;
+    crackB.rotation.z = -0.45;
+    crackA.visible = false;
+    crackB.visible = false;
+    crackA.userData.part = "crackA";
+    crackB.userData.part = "crackB";
+    group.add(crackA);
+    group.add(crackB);
+    addSimpleEyes(group, 8.5, 12.5, 0.78);
+  } else if (plant.plantId === "tallnut") {
+    head = new THREE.Mesh(new THREE.BoxGeometry(32, 58, 26), makeMaterial(0x95663a, 0.92));
+    head.position.y = 16;
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(18, 1.8, 1.2), makeMaterial(0x5b3419, 0.7));
+    brow.position.set(0, 26, 13.4);
+    group.add(brow);
+    addSimpleEyes(group, 16, 13.2, 0.84);
+  } else if (plant.plantId === "cherrybomb") {
+    const cherryA = new THREE.Mesh(new THREE.SphereGeometry(10, 12, 12), makeMaterial(0xcf4f43, 0.58));
+    const cherryB = new THREE.Mesh(new THREE.SphereGeometry(9, 12, 12), makeMaterial(0xde5e4f, 0.58));
+    cherryA.position.set(-6, 8, 0);
+    cherryB.position.set(7, 9, 0);
+    enableShadow(cherryA);
+    enableShadow(cherryB);
+    group.add(cherryA);
+    group.add(cherryB);
+    head = new THREE.Mesh(new THREE.ConeGeometry(3.2, 8, 8), makeMaterial(0xffcd6f, 0.45));
+    head.position.set(2, 20, 0);
+    const fuse = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 8, 6), makeMaterial(0x2f5a2f, 0.85));
+    fuse.position.set(2, 24, 0);
+    fuse.userData.part = "fuse";
+    group.add(fuse);
+    const spark = new THREE.Mesh(
+      new THREE.SphereGeometry(1.8, 8, 8),
+      new THREE.MeshStandardMaterial({ color: 0xffd270, emissive: 0xff9a22, emissiveIntensity: 0.1, roughness: 0.35 })
+    );
+    spark.position.set(2, 28, 0);
+    spark.userData.part = "spark";
+    group.add(spark);
+  } else if (plant.plantId === "potatomine") {
+    head = new THREE.Mesh(new THREE.SphereGeometry(12, 14, 14), makeMaterial(0x9d7348, 0.88));
+    head.position.y = -2;
+    head.scale.set(1.08, 0.7, 1);
+    const sproutA = new THREE.Mesh(new THREE.SphereGeometry(4.2, 8, 8, 0, Math.PI), makeMaterial(0x5f983f, 0.82));
+    const sproutB = new THREE.Mesh(new THREE.SphereGeometry(3.8, 8, 8, 0, Math.PI), makeMaterial(0x4e8c36, 0.82));
+    sproutA.rotation.set(Math.PI / 2.1, -0.4, 0.1);
+    sproutB.rotation.set(Math.PI / 2.1, 0.55, -0.1);
+    sproutA.position.set(-4, 2, -2);
+    sproutB.position.set(4, 3, -2);
+    sproutA.userData.part = "sproutA";
+    sproutB.userData.part = "sproutB";
+    enableShadow(sproutA);
+    enableShadow(sproutB);
+    group.add(sproutA);
+    group.add(sproutB);
+    addSimpleEyes(group, -1.5, 10.6, 0.76);
+  } else if (plant.plantId === "squash") {
+    head = new THREE.Mesh(new THREE.SphereGeometry(12.5, 14, 14), makeMaterial(0x7e9b34, 0.82));
+    head.position.y = 8;
+    head.scale.set(1.05, 0.92, 1.02);
+    const browL = new THREE.Mesh(new THREE.BoxGeometry(5.4, 1.2, 1), makeMaterial(0x37491c, 0.72));
+    const browR = new THREE.Mesh(new THREE.BoxGeometry(5.4, 1.2, 1), makeMaterial(0x37491c, 0.72));
+    browL.position.set(-3.6, 11.6, 11.8);
+    browR.position.set(3.6, 11.6, 11.8);
+    browL.rotation.z = 0.22;
+    browR.rotation.z = -0.22;
+    group.add(browL);
+    group.add(browR);
+    addSimpleEyes(group, 8.8, 11.2, 0.88);
+  } else if (plant.plantId === "spikeweed") {
+    head = new THREE.Mesh(new THREE.CylinderGeometry(8, 10, 4, 12), makeMaterial(0x5e8142, 0.86));
+    head.position.y = -10;
+    for (let i = 0; i < 8; i += 1) {
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(2.2, 10, 6), makeMaterial(0x4b6733, 0.86));
+      const angle = (i / 8) * Math.PI * 2;
+      spike.position.set(Math.cos(angle) * 8, -4, Math.sin(angle) * 8);
+      spike.rotation.z = Math.PI / 2;
+      spike.rotation.y = angle;
+      enableShadow(spike);
+      group.add(spike);
+    }
+  } else {
+    const color = plant.plantId === "snowpea" ? 0x74cae6 : def.color;
+    head = new THREE.Mesh(new THREE.SphereGeometry(12, 14, 14), makeMaterial(color, 0.6));
+    head.position.y = 10;
+    addSimpleEyes(group, 12, 10.8, 0.85);
+    const mouth = new THREE.Mesh(
+      new THREE.CylinderGeometry(3.5, 4.6, 16, 12),
+      makeMaterial(plant.plantId === "snowpea" ? 0x68c0df : 0x3d8f3a, 0.62)
+    );
+    mouth.rotation.z = Math.PI / 2;
+    mouth.position.set(14, 10, 0);
+    enableShadow(mouth);
+    mouth.userData.part = "muzzle";
+    group.add(mouth);
+    addPeaLeaves(group, plant.plantId === "snowpea" ? 0x5ba9cb : 0x3f963a);
+    if (plant.plantId === "repeater") {
+      const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(2, 2.6, 12, 8), makeMaterial(0x2e6d2e));
+      muzzle.rotation.z = Math.PI / 2;
+      muzzle.position.set(20, 6, 0);
+      enableShadow(muzzle);
+      muzzle.userData.part = "muzzle2";
+      group.add(muzzle);
+    }
+  }
+  enableShadow(head);
+  head.userData.part = "head";
+  group.add(head);
+
+  const shadow = new THREE.Mesh(
+    new THREE.CylinderGeometry(11, 12, 1.5, 16),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2 })
+  );
+  shadow.position.y = -16;
+  shadow.userData.part = "shadow";
+  group.add(shadow);
+
+  group.userData.kind = "plant";
+  return group;
+}
+
+function createZombieObject(zombie) {
+  const def = ZOMBIES[zombie.type];
+  const group = new THREE.Group();
+
+  const shirt = new THREE.Mesh(new THREE.CylinderGeometry(8.5, 10.2, 28, 14), makeMaterial(0xd8d1bb, 0.76));
+  shirt.position.y = 4;
+  enableShadow(shirt);
+  group.add(shirt);
+
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(10.2, 12.6, 31, 14), makeMaterial(def.color, 0.62));
+  body.position.y = 4;
+  body.scale.set(1.05, 1, 0.92);
+  enableShadow(body);
+  body.userData.part = "body";
+  group.add(body);
+
+  const shoulder = new THREE.Mesh(new THREE.SphereGeometry(12.8, 12, 12), makeMaterial(def.color, 0.64));
+  shoulder.position.set(0, 17, 0);
+  shoulder.scale.set(1.18, 0.82, 0.92);
+  enableShadow(shoulder);
+  group.add(shoulder);
+
+  const hip = new THREE.Mesh(new THREE.SphereGeometry(10.8, 12, 12), makeMaterial(def.color, 0.64));
+  hip.position.set(0, -8, 0);
+  hip.scale.set(1.06, 0.78, 0.9);
+  enableShadow(hip);
+  group.add(hip);
+
+  const coatL = new THREE.Mesh(new THREE.SphereGeometry(6.2, 10, 10), makeMaterial(def.color, 0.66));
+  const coatR = new THREE.Mesh(new THREE.SphereGeometry(6.2, 10, 10), makeMaterial(def.color, 0.66));
+  coatL.position.set(-5.4, -1, 7.2);
+  coatR.position.set(5.4, -1, 7.2);
+  coatL.scale.set(0.68, 1.45, 0.24);
+  coatR.scale.set(0.68, 1.45, 0.24);
+  coatL.userData.part = "coatL";
+  coatR.userData.part = "coatR";
+  enableShadow(coatL);
+  enableShadow(coatR);
+  group.add(coatL);
+  group.add(coatR);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(10.4, 14, 14), makeMaterial(0xdfcfb7, 0.64));
+  head.position.set(0, 29, 0.6);
+  head.scale.set(1.02, 1.08, 0.98);
+  enableShadow(head);
+  head.userData.part = "head";
+  group.add(head);
+
+  const jaw = new THREE.Mesh(new THREE.SphereGeometry(5.4, 10, 10), makeMaterial(0xc7b99e, 0.7));
+  jaw.position.set(0, 22.5, 7.3);
+  jaw.scale.set(1.05, 0.48, 0.82);
+  jaw.userData.part = "jaw";
+  enableShadow(jaw);
+  group.add(jaw);
+
+  const teeth = new THREE.Mesh(
+    new THREE.BoxGeometry(5.4, 1.6, 1.1),
+    new THREE.MeshStandardMaterial({ color: 0xf3eedf, roughness: 0.82, metalness: 0 })
+  );
+  teeth.position.set(0.1, 22.1, 10.8);
+  teeth.userData.part = "teeth";
+  enableShadow(teeth);
+  group.add(teeth);
+
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(2.9, 8, 8), makeMaterial(0xd3c1a7, 0.72));
+  nose.position.set(0.8, 27.5, 10.2);
+  nose.scale.set(1.18, 0.78, 1.55);
+  nose.userData.part = "nose";
+  enableShadow(nose);
+  group.add(nose);
+
+  const hair = new THREE.Mesh(new THREE.ConeGeometry(2.8, 7, 6), makeMaterial(0x4b3a21, 0.8));
+  hair.position.set(-1.5, 40, 1);
+  hair.rotation.z = 0.4;
+  enableShadow(hair);
+  group.add(hair);
+
+  addSimpleEyes(group, 29, 8.8, 0.74);
+
+  const armL = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.8, 24, 10), makeMaterial(0x5c6f51));
+  const armR = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.8, 24, 10), makeMaterial(0x5c6f51));
+  armL.position.set(-15.5, 5.5, 0);
+  armR.position.set(15.5, 5.5, 0);
+  enableShadow(armL);
+  enableShadow(armR);
+  armL.userData.part = "armL";
+  armR.userData.part = "armR";
+  group.add(armL);
+  group.add(armR);
+
+  const sleeveL = new THREE.Mesh(new THREE.SphereGeometry(4.8, 8, 8), makeMaterial(def.color, 0.64));
+  const sleeveR = new THREE.Mesh(new THREE.SphereGeometry(4.8, 8, 8), makeMaterial(def.color, 0.64));
+  sleeveL.position.set(-13.4, 12, 0);
+  sleeveR.position.set(13.4, 12, 0);
+  sleeveL.scale.set(0.8, 1.05, 0.8);
+  sleeveR.scale.set(0.8, 1.05, 0.8);
+  sleeveL.userData.part = "sleeveL";
+  sleeveR.userData.part = "sleeveR";
+  enableShadow(sleeveL);
+  enableShadow(sleeveR);
+  group.add(sleeveL);
+  group.add(sleeveR);
+
+  const handL = new THREE.Mesh(new THREE.SphereGeometry(3.2, 8, 8), makeMaterial(0xc7b99e, 0.7));
+  const handR = new THREE.Mesh(new THREE.SphereGeometry(3.2, 8, 8), makeMaterial(0xc7b99e, 0.7));
+  handL.position.set(-15, -6, 0);
+  handR.position.set(15, -6, 0);
+  handL.userData.part = "handL";
+  handR.userData.part = "handR";
+  enableShadow(handL);
+  enableShadow(handR);
+  group.add(handL);
+  group.add(handR);
+
+  const legL = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.9, 22, 10), makeMaterial(0x415339));
+  const legR = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.9, 22, 10), makeMaterial(0x415339));
+  legL.position.set(-5.2, -22, 0);
+  legR.position.set(5.2, -22, 0);
+  enableShadow(legL);
+  enableShadow(legR);
+  legL.userData.part = "legL";
+  legR.userData.part = "legR";
+  group.add(legL);
+  group.add(legR);
+
+  const footL = new THREE.Mesh(new THREE.SphereGeometry(4.2, 8, 8), makeMaterial(0x2f2f2f, 0.86));
+  const footR = new THREE.Mesh(new THREE.SphereGeometry(4.2, 8, 8), makeMaterial(0x2f2f2f, 0.86));
+  footL.position.set(-5.4, -34, 3.8);
+  footR.position.set(5.4, -34, 3.8);
+  footL.scale.set(1.4, 0.5, 1.8);
+  footR.scale.set(1.4, 0.5, 1.8);
+  enableShadow(footL);
+  enableShadow(footR);
+  group.add(footL);
+  group.add(footR);
+
+  if (zombie.type === "conehead") {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(10, 22, 16), makeMaterial(0xd98d2f, 0.6));
+    cone.position.set(0, 42, 0);
+    enableShadow(cone);
+    cone.userData.part = "cone";
+    group.add(cone);
+  }
+
+  if (zombie.type === "buckethead") {
+    const bucket = new THREE.Mesh(new THREE.CylinderGeometry(10.5, 11.5, 13, 16), makeMaterial(0x9aa3a8, 0.45, 0.3));
+    bucket.position.set(0, 42, 0);
+    enableShadow(bucket);
+    bucket.userData.part = "bucket";
+    group.add(bucket);
+  }
+
+  if (zombie.type === "newspaper") {
+    const paper = new THREE.Mesh(
+      new THREE.BoxGeometry(1.8, 24, 18),
+      new THREE.MeshStandardMaterial({ color: 0xe6e2d7, roughness: 0.96, metalness: 0.0 })
+    );
+    paper.position.set(-15, 8, 10);
+    paper.rotation.y = -0.35;
+    paper.userData.part = "paper";
+    enableShadow(paper);
+    group.add(paper);
+  }
+
+  if (zombie.type === "polevault") {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 54, 8), makeMaterial(0xc3a36f, 0.82));
+    pole.position.set(8, 18, 0);
+    pole.rotation.z = 0.6;
+    pole.userData.part = "pole";
+    enableShadow(pole);
+    group.add(pole);
+  }
+
+  if (zombie.type === "screendoor") {
+    const shield = new THREE.Mesh(
+      new THREE.BoxGeometry(6, 38, 20),
+      new THREE.MeshStandardMaterial({ color: 0xb7c4c8, roughness: 0.5, metalness: 0.45 })
+    );
+    shield.position.set(-19, 2, 0);
+    shield.userData.shield = true;
+    enableShadow(shield);
+    group.add(shield);
+  }
+
+  if (zombie.type === "flag") {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 36, 8), makeMaterial(0x9e8f76, 0.75));
+    pole.position.set(-16, 14, 0);
+    pole.userData.part = "flagPole";
+    enableShadow(pole);
+    group.add(pole);
+
+    const flag = new THREE.Mesh(
+      new THREE.PlaneGeometry(18, 14),
+      new THREE.MeshStandardMaterial({ color: 0xc7433e, roughness: 0.74, metalness: 0.0, side: THREE.DoubleSide })
+    );
+    flag.position.set(-7, 22, 8);
+    flag.userData.part = "flagCloth";
+    group.add(flag);
+  }
+
+  if (zombie.type === "football") {
+    const helmet = new THREE.Mesh(new THREE.SphereGeometry(10.2, 12, 12), makeMaterial(0x8b2b2c, 0.52, 0.12));
+    helmet.position.set(0, 30.5, 1.4);
+    helmet.scale.set(1.08, 0.92, 1.02);
+    helmet.userData.part = "helmet";
+    enableShadow(helmet);
+    group.add(helmet);
+
+    const visor = new THREE.Mesh(new THREE.TorusGeometry(7, 0.8, 6, 16, Math.PI), makeMaterial(0xf1f0ea, 0.5));
+    visor.position.set(0, 29.8, 9.8);
+    visor.rotation.z = Math.PI;
+    visor.userData.part = "helmetVisor";
+    enableShadow(visor);
+    group.add(visor);
+
+    const shoulderPads = new THREE.Mesh(new THREE.SphereGeometry(14, 12, 12), makeMaterial(0x7f2d30, 0.6));
+    shoulderPads.position.set(0, 18, 0);
+    shoulderPads.scale.set(1.34, 0.75, 0.98);
+    shoulderPads.userData.part = "pads";
+    enableShadow(shoulderPads);
+    group.add(shoulderPads);
+  }
+
+  const tie = new THREE.Mesh(new THREE.ConeGeometry(3.1, 14, 6), makeMaterial(0xb02627, 0.58));
+  tie.position.set(0, -5, 9.2);
+  tie.rotation.x = 0.2;
+  tie.userData.part = "tie";
+  enableShadow(tie);
+  group.add(tie);
+
+  const shadow = new THREE.Mesh(
+    new THREE.CylinderGeometry(13, 15, 1.5, 16),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.24 })
+  );
+  shadow.position.y = -22;
+  shadow.userData.part = "shadow";
+  group.add(shadow);
+
+  group.userData.kind = "zombie";
+  return group;
+}
+
+function createProjectileObject(projectile) {
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(5.5, 10, 10),
+    new THREE.MeshStandardMaterial({
+      color: projectile.slow ? 0x89ddff : 0x57bf4c,
+      emissive: projectile.slow ? 0x0a5778 : 0x1c5d1a,
+      emissiveIntensity: 0.35,
+      roughness: 0.4,
+      metalness: 0.02,
+    })
+  );
+  enableShadow(mesh);
+  return mesh;
+}
+
+function createSunObject() {
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(10, 12, 12),
+    new THREE.MeshStandardMaterial({ color: 0xffd64f, emissive: 0x7f5b00, emissiveIntensity: 0.3, roughness: 0.35 })
+  );
+  enableShadow(mesh);
+  return mesh;
+}
+
+function createMowerObject() {
+  const group = new THREE.Group();
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(28, 16, 18), makeMaterial(0xd14f38, 0.58));
+  body.position.set(0, 2, 0);
+  enableShadow(body);
+  group.add(body);
+
+  const engine = new THREE.Mesh(new THREE.BoxGeometry(12, 10, 12), makeMaterial(0x464b50, 0.44, 0.18));
+  engine.position.set(2, 12, 0);
+  enableShadow(engine);
+  group.add(engine);
+
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(10, 1.2, 6, 14, Math.PI), makeMaterial(0x7f8d8f, 0.38, 0.2));
+  handle.rotation.z = Math.PI / 2;
+  handle.position.set(-12, 18, 0);
+  enableShadow(handle);
+  group.add(handle);
+
+  [-8, 8].forEach((offsetZ) => {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 3, 12), makeMaterial(0x232323, 0.88));
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(6, -6, offsetZ);
+    enableShadow(wheel);
+    group.add(wheel);
+  });
+
+  group.userData.kind = "mower";
+  return group;
+}
+
+function ensurePreviewObjects() {
+  const group = sceneState.groups.preview;
+  if (!group) {
+    return;
+  }
+  if (!group.userData.hoverTile) {
+    const hoverTile = new THREE.Mesh(
+      new THREE.BoxGeometry(CELL_W - 8, 3.2, CELL_H - 8),
+      new THREE.MeshStandardMaterial({ color: 0xf7e38a, transparent: true, opacity: 0.0, roughness: 0.7 })
+    );
+    hoverTile.position.y = 0.5;
+    hoverTile.visible = false;
+    group.userData.hoverTile = hoverTile;
+    group.add(hoverTile);
+  }
+}
+
+function updateHoverPreview() {
+  const group = sceneState.groups.preview;
+  if (!group) {
+    return;
+  }
+
+  ensurePreviewObjects();
+  const hoverTile = group.userData.hoverTile;
+  const hover = state.hoverCell;
+  if (!hover || !state.running || state.paused) {
+    hoverTile.visible = false;
+    if (group.userData.previewPlant) {
+      group.remove(group.userData.previewPlant);
+      group.userData.previewPlant = null;
+      group.userData.previewPlantId = null;
+    }
+    return;
+  }
+
+  const centerX = BOARD_X + hover.col * CELL_W + CELL_W / 2;
+  const centerY = BOARD_Y + hover.row * CELL_H + CELL_H / 2;
+  const hasPlant = Boolean(state.plants[hover.row]?.[hover.col]);
+  hoverTile.visible = true;
+  hoverTile.position.set(toWorldX(centerX), 0.5, toWorldY(centerY));
+
+  let tileColor = 0xf7e38a;
+  let tileOpacity = 0.26;
+  if (state.shovelMode) {
+    tileColor = hasPlant ? 0xe46a58 : 0x8a5a52;
+    tileOpacity = hasPlant ? 0.34 : 0.18;
+  } else if (state.selectedPlant) {
+    tileColor = hasPlant ? 0xd7765b : 0x9de27b;
+    tileOpacity = hasPlant ? 0.22 : 0.3;
+  }
+  hoverTile.material.color.setHex(tileColor);
+  hoverTile.material.opacity = tileOpacity;
+
+  if (!state.selectedPlant || state.shovelMode || hasPlant) {
+    if (group.userData.previewPlant) {
+      group.remove(group.userData.previewPlant);
+      group.userData.previewPlant = null;
+      group.userData.previewPlantId = null;
+    }
+    return;
+  }
+
+  if (group.userData.previewPlantId !== state.selectedPlant) {
+    if (group.userData.previewPlant) {
+      group.remove(group.userData.previewPlant);
+    }
+    const previewPlant = createPlantObject({
+      plantId: state.selectedPlant,
+      row: hover.row,
+      col: hover.col,
+      x: centerX,
+      y: centerY,
+      hp: 999,
+      fireTimer: 0,
+      produceTimer: 0,
+      fuseTimer: 0,
+      hitFlash: 0,
+      action: "idle",
+      animSeed: 0,
+    });
+    previewPlant.traverse((child) => {
+      if (child.isMesh && child.material) {
+        child.material = child.material.clone();
+        child.material.transparent = true;
+        child.material.opacity = child.userData.part === "shadow" ? 0.12 : 0.42;
+      }
+    });
+    group.userData.previewPlant = previewPlant;
+    group.userData.previewPlantId = state.selectedPlant;
+    group.add(previewPlant);
+  }
+
+  const previewPlant = group.userData.previewPlant;
+  previewPlant.position.set(toWorldX(centerX), 10 + hover.row * 0.2, toWorldY(centerY));
+  previewPlant.rotation.z = Math.sin((state.levelTime || 0) * 2.2) * 0.04;
+}
+
+function updateMowerObject(mower, obj) {
+  const screenY = BOARD_Y + mower.row * CELL_H + CELL_H / 2;
+  obj.position.set(toWorldX(mower.x), 7, toWorldY(screenY));
+  obj.visible = mower.active || !mower.spent;
+  obj.rotation.y = mower.active ? Math.sin((state.levelTime || 0) * 18) * 0.05 : 0;
+}
+
+function syncMap(items, map, group, createFn, updateFn) {
+  const liveIds = new Set(items.map((item) => item.id));
+
+  for (const [id, obj] of map.entries()) {
+    if (!liveIds.has(id)) {
+      group.remove(obj);
+      map.delete(id);
+    }
+  }
+
+  items.forEach((item) => {
+    let obj = map.get(item.id);
+    if (!obj) {
+      obj = createFn(item);
+      map.set(item.id, obj);
+      group.add(obj);
+    }
+    updateFn(item, obj);
+  });
+}
+
+function updatePlantObject(plant, obj) {
+  const def = PLANTS[plant.plantId];
+  const hpRatio = Math.max(0, Math.min(1, plant.hp / Math.max(1, def.hp)));
+  const wobble = Math.sin((state.levelTime || 0) * 2.8 + (plant.animSeed || 0)) * 0.06;
+  const flash = Math.max(0, plant.hitFlash || 0);
+  const actionScale = plant.action === "attack" ? 1.08 : plant.action === "produce" ? 1.12 : plant.action === "hurt" ? 0.95 : 1;
+
+  obj.position.set(toWorldX(plant.x), 10 + plant.row * 0.2, toWorldY(plant.y));
+  obj.rotation.z = wobble;
+  obj.scale.set(actionScale, actionScale, actionScale);
+
+  const head = obj.children.find((child) => child.userData.part === "head");
+  const stem = obj.children.find((child) => child.userData.part === "stem");
+  const muzzle = obj.children.find((child) => child.userData.part === "muzzle");
+  const muzzle2 = obj.children.find((child) => child.userData.part === "muzzle2");
+  const crackA = obj.children.find((child) => child.userData.part === "crackA");
+  const crackB = obj.children.find((child) => child.userData.part === "crackB");
+  const fuse = obj.children.find((child) => child.userData.part === "fuse");
+  const spark = obj.children.find((child) => child.userData.part === "spark");
+  const sproutA = obj.children.find((child) => child.userData.part === "sproutA");
+  const sproutB = obj.children.find((child) => child.userData.part === "sproutB");
+  if (head) {
+    const nod = plant.action === "attack" ? -0.3 : plant.action === "hurt" ? 0.22 : 0;
+    head.rotation.z = nod + wobble * 2.2;
+    const baseY = plant.plantId === "wallnut" ? 8 : plant.plantId === "tallnut" ? 16 : plant.plantId === "potatomine" ? -2 : 10;
+    head.position.y = baseY + Math.sin((state.levelTime || 0) * 5 + (plant.animSeed || 0)) * (plant.action === "produce" ? 2.4 : 0.6);
+    if (plant.plantId === "sunflower") {
+      head.rotation.y = Math.sin((state.levelTime || 0) * 1.6 + (plant.animSeed || 0)) * 0.22;
+    }
+    if (plant.plantId === "potatomine") {
+      head.position.y = plant.armed ? 2.5 : -2.5;
+      head.scale.y = plant.armed ? 0.96 : 0.62;
+    }
+    if (plant.plantId === "squash") {
+      head.scale.y = plant.action === "attack" ? 0.72 : 0.92;
+      head.position.y = plant.action === "attack" ? 13 : 8;
+    }
+    if (plant.plantId === "spikeweed") {
+      head.rotation.y = Math.sin((state.levelTime || 0) * 4 + (plant.animSeed || 0)) * 0.08;
+      head.position.y = -10;
+    }
+  }
+  if (stem) {
+    stem.rotation.z = wobble * 1.35;
+  }
+  if (muzzle) {
+    const stretch = plant.action === "attack" ? 1.15 : 1;
+    muzzle.scale.set(stretch, 1, 1);
+  }
+  if (muzzle2) {
+    const stretch = plant.action === "attack" ? 1.2 : 1;
+    muzzle2.scale.set(stretch, 1, 1);
+    muzzle2.position.y = 6 + Math.sin((state.levelTime || 0) * 7 + (plant.animSeed || 0)) * 0.7;
+  }
+  if (crackA) {
+    crackA.visible = hpRatio < 0.65;
+  }
+  if (crackB) {
+    crackB.visible = hpRatio < 0.35;
+  }
+  if (fuse) {
+    fuse.rotation.z = Math.sin((state.levelTime || 0) * 11 + (plant.animSeed || 0)) * 0.08;
+  }
+  if (spark && supportsEmissive(spark.material)) {
+    const fuseProgress = def.kind === "bomb" ? Math.min(1, plant.fuseTimer / def.fuse) : 0;
+    spark.scale.setScalar(0.9 + Math.sin((state.levelTime || 0) * 20) * 0.15 + fuseProgress * 0.4);
+    spark.material.emissiveIntensity = 0.12 + fuseProgress * 0.9;
+  }
+  if (sproutA) {
+    sproutA.rotation.z = Math.sin((state.levelTime || 0) * 5 + (plant.animSeed || 0)) * 0.14;
+  }
+  if (sproutB) {
+    sproutB.rotation.z = -Math.sin((state.levelTime || 0) * 5 + (plant.animSeed || 0)) * 0.14;
+  }
+
+  obj.traverse((child) => {
+    if (child.isMesh && child.material && child.material.color) {
+      if (supportsEmissive(child.material)) {
+        const baseEmissive = plant.plantId === "snowpea" ? 0x4aa7c8 : 0x000000;
+        child.material.emissive.setHex(baseEmissive);
+        child.material.emissiveIntensity = (plant.plantId === "snowpea" ? 0.08 : 0) + flash * 1.2;
+      }
+    }
+  });
+}
+
+function updateZombieObject(zombie, obj) {
+  const t = state.levelTime || 0;
+  const pace = zombie.action === "bite" ? 9 : zombie.action === "hurt" ? 12 : 6.5;
+  const phase = Math.sin(t * pace + (zombie.animSeed || 0));
+  const secondaryPhase = Math.cos(t * (pace * 0.65) + (zombie.animSeed || 0));
+  const flash = Math.max(0, zombie.hitFlash || 0);
+
+  obj.position.set(toWorldX(zombie.x), 10 + zombie.row * 0.2, toWorldY(BOARD_Y + zombie.row * CELL_H + CELL_H / 2));
+  obj.rotation.z = phase * 0.05;
+
+  const armL = obj.children.find((child) => child.userData.part === "armL");
+  const armR = obj.children.find((child) => child.userData.part === "armR");
+  const sleeveL = obj.children.find((child) => child.userData.part === "sleeveL");
+  const sleeveR = obj.children.find((child) => child.userData.part === "sleeveR");
+  const handL = obj.children.find((child) => child.userData.part === "handL");
+  const handR = obj.children.find((child) => child.userData.part === "handR");
+  const legL = obj.children.find((child) => child.userData.part === "legL");
+  const legR = obj.children.find((child) => child.userData.part === "legR");
+  const head = obj.children.find((child) => child.userData.part === "head");
+  const body = obj.children.find((child) => child.userData.part === "body");
+  const jaw = obj.children.find((child) => child.userData.part === "jaw");
+  const teeth = obj.children.find((child) => child.userData.part === "teeth");
+  const nose = obj.children.find((child) => child.userData.part === "nose");
+  const coatL = obj.children.find((child) => child.userData.part === "coatL");
+  const coatR = obj.children.find((child) => child.userData.part === "coatR");
+  const cone = obj.children.find((child) => child.userData.part === "cone");
+  const bucket = obj.children.find((child) => child.userData.part === "bucket");
+  const paper = obj.children.find((child) => child.userData.part === "paper");
+  const pole = obj.children.find((child) => child.userData.part === "pole");
+  const flagPole = obj.children.find((child) => child.userData.part === "flagPole");
+  const flagCloth = obj.children.find((child) => child.userData.part === "flagCloth");
+  const helmet = obj.children.find((child) => child.userData.part === "helmet");
+  const helmetVisor = obj.children.find((child) => child.userData.part === "helmetVisor");
+  const pads = obj.children.find((child) => child.userData.part === "pads");
+  const tie = obj.children.find((child) => child.userData.part === "tie");
+  const hpRatio = zombie.hp / Math.max(1, zombie.maxHp);
+  const isBiting = zombie.action === "bite";
+  const isHurt = zombie.action === "hurt";
+
+  if (armL) {
+    armL.rotation.z = phase * 0.35;
+    armL.rotation.x = 0.2 + Math.abs(secondaryPhase) * (isBiting ? 0.42 : 0.22);
+    armL.position.y = 5.5 - Math.abs(phase) * 1.4;
+  }
+  if (armR) {
+    armR.rotation.z = -phase * 0.35;
+    armR.rotation.x = 0.2 + Math.abs(secondaryPhase) * (isBiting ? 0.42 : 0.22);
+    armR.position.y = 5.5 - Math.abs(phase) * 1.4;
+  }
+  if (sleeveL) {
+    sleeveL.rotation.z = phase * 0.16;
+    sleeveL.position.y = 12 - Math.abs(phase) * 0.5;
+  }
+  if (sleeveR) {
+    sleeveR.rotation.z = -phase * 0.16;
+    sleeveR.position.y = 12 - Math.abs(phase) * 0.5;
+  }
+  if (handL) {
+    handL.position.y = -6 - Math.abs(phase) * 1.6;
+    handL.position.z = isBiting ? 1.6 : Math.abs(secondaryPhase) * 0.4;
+  }
+  if (handR) {
+    handR.position.y = -6 - Math.abs(phase) * 1.6;
+    handR.position.z = isBiting ? 1.6 : Math.abs(secondaryPhase) * 0.4;
+  }
+  if (legL) {
+    legL.rotation.z = -phase * 0.28;
+  }
+  if (legR) {
+    legR.rotation.z = phase * 0.28;
+  }
+  if (head) {
+    head.rotation.z = isHurt ? phase * 0.22 : phase * 0.08;
+    head.rotation.x = isBiting ? -0.14 - Math.abs(secondaryPhase) * 0.05 : secondaryPhase * 0.03;
+    head.position.y = 29 + Math.abs(phase) * (isBiting ? 1.2 : 0.4);
+    head.position.z = 0.6 + (isBiting ? 1.5 : secondaryPhase * 0.35);
+  }
+  if (body) {
+    body.rotation.z = isBiting ? -0.08 : 0;
+  }
+  if (jaw) {
+    jaw.rotation.x = isBiting ? 0.5 + Math.abs(phase) * 0.3 : 0.18 + Math.abs(secondaryPhase) * 0.04;
+    jaw.position.z = isBiting ? 8.6 : 7.2 + secondaryPhase * 0.18;
+  }
+  if (teeth) {
+    teeth.position.y = isBiting ? 21.2 - Math.abs(phase) * 0.35 : 22.1;
+    teeth.position.z = isBiting ? 11.2 : 10.8 + secondaryPhase * 0.12;
+    teeth.rotation.x = isBiting ? -0.08 : 0;
+  }
+  if (nose) {
+    nose.position.x = 0.8 + phase * 0.12;
+    nose.position.y = 27.5 + Math.abs(phase) * (isBiting ? 0.75 : 0.2);
+    nose.position.z = 10.2 + (isBiting ? 1.4 : secondaryPhase * 0.35);
+    nose.rotation.z = isHurt ? phase * 0.08 : secondaryPhase * 0.03;
+  }
+  if (coatL) {
+    coatL.rotation.y = 0.08 + phase * 0.18;
+    coatL.rotation.z = -0.06 - Math.abs(secondaryPhase) * (isBiting ? 0.14 : 0.08);
+    coatL.position.z = 7.2 + Math.abs(phase) * 0.8;
+  }
+  if (coatR) {
+    coatR.rotation.y = -0.08 - phase * 0.18;
+    coatR.rotation.z = 0.06 + Math.abs(secondaryPhase) * (isBiting ? 0.14 : 0.08);
+    coatR.position.z = 7.2 + Math.abs(phase) * 0.8;
+  }
+  if (tie) {
+    tie.rotation.z = -phase * 0.18;
+  }
+  if (cone) {
+    cone.visible = hpRatio > 0.55;
+    cone.position.y = 42 + Math.abs(phase) * 0.35;
+    cone.position.z = head ? head.position.z * 0.25 : 0;
+    cone.rotation.z = 0.12 + phase * 0.03 + (head ? head.rotation.z * 0.5 : 0);
+  }
+  if (bucket) {
+    bucket.visible = hpRatio > 0.48;
+    bucket.position.y = 42 + Math.abs(phase) * 0.28;
+    bucket.position.z = head ? head.position.z * 0.2 : 0;
+    bucket.rotation.z = -0.08 + phase * 0.02 + (head ? head.rotation.z * 0.4 : 0);
+    bucket.scale.y = hpRatio < 0.68 ? 0.92 : 1;
+  }
+  if (paper) {
+    paper.visible = !zombie.enraged;
+    paper.rotation.z = Math.sin(t * 5.5 + (zombie.animSeed || 0)) * 0.08;
+  }
+  if (pole) {
+    pole.visible = !zombie.jumped;
+    pole.rotation.z = zombie.action === "bite" ? 0.18 : 0.6;
+  }
+  if (flagPole) {
+    flagPole.rotation.z = 0.08 + phase * 0.03;
+    flagPole.position.y = 14 + Math.abs(phase) * 0.6;
+  }
+  if (flagCloth) {
+    flagCloth.rotation.y = 0.35 + secondaryPhase * 0.18;
+    flagCloth.rotation.z = -0.08 + phase * 0.04;
+  }
+  if (helmet) {
+    helmet.position.y = 30.5 + Math.abs(phase) * 0.4;
+    helmet.position.z = 1.4 + (head ? head.position.z * 0.22 : 0);
+    helmet.rotation.z = head ? head.rotation.z * 0.55 : 0;
+    helmet.visible = hpRatio > 0.42;
+  }
+  if (helmetVisor) {
+    helmetVisor.visible = hpRatio > 0.42;
+    helmetVisor.position.y = 29.8 + Math.abs(phase) * 0.35;
+    helmetVisor.position.z = 9.8 + (head ? head.position.z * 0.18 : 0);
+    helmetVisor.rotation.z = Math.PI + (head ? head.rotation.z * 0.45 : 0);
+  }
+  if (pads) {
+    pads.position.y = 18 + Math.abs(phase) * 0.35;
+    pads.rotation.z = phase * 0.03;
+  }
+
+  obj.traverse((child) => {
+    if (child.userData.shield) {
+      child.visible = zombie.shieldHp > 0;
+    }
+    if (child.isMesh && child.material) {
+      if (supportsEmissive(child.material)) {
+        if (state.levelTime <= zombie.slowUntil) {
+          child.material.emissive.setHex(0x7bc8ff);
+          child.material.emissiveIntensity = Math.max(0.28, flash * 1.1);
+        } else {
+          child.material.emissive.setHex(0x000000);
+          child.material.emissiveIntensity = flash * 1.1;
+        }
+      }
+    }
+  });
+}
+
+function updateProjectileObject(projectile, obj) {
+  const pulse = 1 + Math.sin((state.levelTime || 0) * 18 + (projectile.x % 11)) * 0.1;
+  obj.position.set(toWorldX(projectile.x), 16 + projectile.row * 0.12, toWorldY(projectile.y));
+  obj.scale.set(pulse, pulse, pulse);
+}
+
+function updateSunObject(sun, obj) {
+  const pulse = 1 + Math.sin((state.levelTime || 0) * 6 + (sun.x % 17)) * 0.08;
+  obj.position.set(toWorldX(sun.x), 24, toWorldY(sun.y));
+  obj.rotation.y += 0.04;
+  obj.scale.set(pulse, pulse, pulse);
+}
+
+function rebuildEffects() {
+  const group = sceneState.groups.effects;
+  while (group.children.length) {
+    const child = group.children.pop();
+    group.remove(child);
+  }
+
+  const budget = getEffectivePreset().effectBudget;
+  const visibleEffects = state.effects.slice(-budget);
+  visibleEffects.forEach((effect) => {
+    if (effect.type === "dust") {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(4, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xc3a47a, transparent: true, opacity: Math.max(0, effect.ttl / 0.28) })
+      );
+      mesh.position.set(toWorldX(effect.x), 4, toWorldY(effect.y));
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "boom") {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(Math.max(8, (effect.radius || 26) * 0.24), 10, 10),
+        new THREE.MeshBasicMaterial({ color: 0xef6438, transparent: true, opacity: Math.max(0, effect.ttl * 1.5) })
+      );
+      mesh.position.set(toWorldX(effect.x), 12, toWorldY(effect.y));
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "mower-start" || effect.type === "mower-spark") {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(effect.type === "mower-start" ? 8 : 5, 10, 10),
+        new THREE.MeshBasicMaterial({ color: effect.type === "mower-start" ? 0xffc96e : 0xfff1b1, transparent: true, opacity: Math.max(0, effect.ttl * 2) })
+      );
+      mesh.position.set(toWorldX(effect.x), 8, toWorldY(effect.y));
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "cone-drop") {
+      const mesh = new THREE.Mesh(
+        new THREE.ConeGeometry(7, 16, 14),
+        new THREE.MeshStandardMaterial({ color: 0xd98d2f, roughness: 0.62, metalness: 0.02 })
+      );
+      mesh.position.set(toWorldX(effect.x), 8, toWorldY(effect.y));
+      mesh.rotation.z = 0.7;
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "bucket-drop") {
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(8, 9, 10, 14),
+        new THREE.MeshStandardMaterial({ color: 0x9aa3a8, roughness: 0.45, metalness: 0.35 })
+      );
+      mesh.position.set(toWorldX(effect.x), 8, toWorldY(effect.y));
+      mesh.rotation.z = -0.5;
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "door-drop") {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(5, 28, 16),
+        new THREE.MeshStandardMaterial({ color: 0xb7c4c8, roughness: 0.56, metalness: 0.32 })
+      );
+      mesh.position.set(toWorldX(effect.x), 8, toWorldY(effect.y));
+      mesh.rotation.z = 0.85;
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "paper-burst") {
+      for (let i = 0; i < 3; i += 1) {
+        const mesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(8, 10),
+          new THREE.MeshBasicMaterial({ color: 0xf2eee0, transparent: true, opacity: Math.max(0, effect.ttl) })
+        );
+        mesh.position.set(toWorldX(effect.x + i * 5), 14 + i * 2, toWorldY(effect.y - i * 4));
+        mesh.rotation.set(-Math.PI / 2, 0, i * 0.45);
+        group.add(mesh);
+      }
+      return;
+    }
+
+    if (effect.type === "pole-drop") {
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.1, 1.1, 48, 8),
+        new THREE.MeshStandardMaterial({ color: 0xc3a36f, roughness: 0.82, metalness: 0.03 })
+      );
+      mesh.position.set(toWorldX(effect.x), 7, toWorldY(effect.y));
+      mesh.rotation.z = 1.1;
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "zombie-fall" || effect.type === "plant-fall") {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(18, 18, 12),
+        new THREE.MeshBasicMaterial({ color: effect.type === "zombie-fall" ? 0x8ba181 : 0x5a9f4c, transparent: true, opacity: 0.5 })
+      );
+      mesh.position.set(toWorldX(effect.x), 6, toWorldY(effect.y));
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "pop") {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(7, 10, 10),
+        new THREE.MeshBasicMaterial({ color: 0xffb477, transparent: true, opacity: Math.max(0, effect.ttl * 1.5) })
+      );
+      mesh.position.set(toWorldX(effect.x), 10, toWorldY(effect.y));
+      group.add(mesh);
+      return;
+    }
+
+    if (effect.type === "hit" || effect.type === "ice-hit" || effect.type === "shield-hit") {
+      const color = effect.type === "ice-hit" ? 0xa7e9ff : effect.type === "shield-hit" ? 0xdaebf1 : 0xffefb2;
+      const mesh = new THREE.Mesh(
+        new THREE.TorusGeometry(5, 1.2, 8, 16),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 })
+      );
+      mesh.position.set(toWorldX(effect.x), 10, toWorldY(effect.y));
+      group.add(mesh);
+    }
+  });
+}
+
+function updateCameraAndShake() {
+  if (state.stats.kills > sceneState.lastKillCount) {
+    sceneState.shake = Math.min(1, sceneState.shake + 0.42);
+    sceneState.lastKillCount = state.stats.kills;
+  }
+
+  const current = sceneState.cameraCurrent;
+  const target = sceneState.cameraTarget;
+  current.x += (target.x - current.x) * 0.08;
+  current.y += (target.y - current.y) * 0.08;
+  current.z += (target.z - current.z) * 0.08;
+  current.lookY += (target.lookY - current.lookY) * 0.08;
+
+  sceneState.shake = Math.max(0, sceneState.shake - 0.05);
+  const shakeStrength = sceneState.performanceMode ? 0.45 : 1;
+  const shakeX = (Math.random() - 0.5) * sceneState.shake * 8 * shakeStrength;
+  const shakeY = (Math.random() - 0.5) * sceneState.shake * 5 * shakeStrength;
+
+  sceneState.camera.position.set(current.x + shakeX, current.y + shakeY, current.z);
+  sceneState.camera.lookAt(0, 0, current.lookY);
+}
+
+function initScene() {
+  if (sceneState.ready || sceneState.initFailed) {
+    return;
+  }
+
+  if (!THREE) {
+    sceneState.initFailed = true;
+    sceneState.initError = "Three.js 模块不可用";
+    return;
+  }
+
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: ui.canvas, antialias: true });
+  } catch (error) {
+    sceneState.initFailed = true;
+    sceneState.initError = error instanceof Error ? error.message : "WebGL 初始化失败";
+    return;
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  renderer.setSize(ui.canvas.width, ui.canvas.height, false);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.02;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xa5d07a);
+  scene.fog = new THREE.Fog(0xa5d07a, 700, 1600);
+
+  const camera = new THREE.PerspectiveCamera(46, ui.canvas.width / ui.canvas.height, 1, 2600);
+  camera.position.set(CAMERA_PRESETS.default.x, CAMERA_PRESETS.default.y, CAMERA_PRESETS.default.z);
+  camera.lookAt(0, 0, CAMERA_PRESETS.default.lookY);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.72);
+  scene.add(ambient);
+
+  const hemi = new THREE.HemisphereLight(0xd6ecff, 0x6d9c4d, 0.35);
+  scene.add(hemi);
+
+  const keyLight = new THREE.DirectionalLight(0xfff3d8, 0.9);
+  keyLight.position.set(-250, 420, 520);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.width = 1024;
+  keyLight.shadow.mapSize.height = 1024;
+  keyLight.shadow.camera.near = 80;
+  keyLight.shadow.camera.far = 1400;
+  scene.add(keyLight);
+
+  const rimLight = new THREE.DirectionalLight(0x9acbff, 0.38);
+  rimLight.position.set(360, -260, 320);
+  scene.add(rimLight);
+
+  const root = new THREE.Group();
+  scene.add(root);
+
+  const plants = new THREE.Group();
+  const mowers = new THREE.Group();
+  const zombies = new THREE.Group();
+  const projectiles = new THREE.Group();
+  const suns = new THREE.Group();
+  const effects = new THREE.Group();
+  const preview = new THREE.Group();
+  root.add(mowers);
+  root.add(plants);
+  root.add(zombies);
+  root.add(projectiles);
+  root.add(suns);
+  root.add(effects);
+  root.add(preview);
+
+  sceneState.renderer = renderer;
+  sceneState.scene = scene;
+  sceneState.camera = camera;
+  sceneState.root = root;
+  sceneState.groups.mowers = mowers;
+  sceneState.groups.plants = plants;
+  sceneState.groups.zombies = zombies;
+  sceneState.groups.projectiles = projectiles;
+  sceneState.groups.suns = suns;
+  sceneState.groups.effects = effects;
+  sceneState.groups.preview = preview;
+  sceneState.keyLight = keyLight;
+  sceneState.cameraCurrent = { ...CAMERA_PRESETS.default };
+  sceneState.cameraTarget = { ...CAMERA_PRESETS.default };
+  sceneState.ready = true;
+
+  buildStaticWorld();
+  applyResolvedQuality();
+  resizeRendererIfNeeded();
+}
+
+function drawFallback2D() {
+  const ctx = ui.canvas.getContext("2d");
+  if (!ctx) {
+    return;
+  }
+  ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
+  ctx.fillStyle = "#8ab85f";
+  ctx.fillRect(0, 0, ui.canvas.width, ui.canvas.height);
+  ctx.fillStyle = "#1d2f13";
+  ctx.font = "bold 16px Verdana";
+  ctx.fillText("Three.js 渲染不可用，使用降级视图", 20, 30);
+  if (sceneState.initError) {
+    ctx.fillStyle = "#3b1f1f";
+    ctx.font = "12px Verdana";
+    ctx.fillText(sceneState.initError, 20, 52);
+  }
+}
+
+export function draw() {
+  if (!sceneState.ready && !sceneState.initFailed) {
+    initScene();
+  }
+
+  if (!sceneState.ready) {
+    drawFallback2D();
+    return;
+  }
+
+  resizeRendererIfNeeded();
+
+  const now = performance.now();
+  if (sceneState.lastFrameAt > 0) {
+    const frameMs = now - sceneState.lastFrameAt;
+    sceneState.frameSampleMs = sceneState.frameSampleMs * 0.92 + frameMs * 0.08;
+  }
+  sceneState.lastFrameAt = now;
+  resolveAutoQualityByFrameTime();
+
+  syncMap(state.lawnMowers, sceneState.maps.mowers, sceneState.groups.mowers, createMowerObject, updateMowerObject);
+  syncMap(state.plants.flat().filter(Boolean), sceneState.maps.plants, sceneState.groups.plants, createPlantObject, updatePlantObject);
+  syncMap(state.zombies, sceneState.maps.zombies, sceneState.groups.zombies, createZombieObject, updateZombieObject);
+  syncMap(state.projectiles, sceneState.maps.projectiles, sceneState.groups.projectiles, createProjectileObject, updateProjectileObject);
+  syncMap(state.suns, sceneState.maps.suns, sceneState.groups.suns, createSunObject, updateSunObject);
+  rebuildEffects();
+  updateHoverPreview();
+  updateCameraAndShake();
+
+  sceneState.renderer.render(sceneState.scene, sceneState.camera);
+}
+
+export function toggleCameraMode() {
+  sceneState.cameraMode = sceneState.cameraMode === "default" ? "close" : "default";
+  sceneState.cameraTarget = { ...CAMERA_PRESETS[sceneState.cameraMode] };
+  return sceneState.cameraMode;
+}
+
+export function setRenderQuality(quality) {
+  sceneState.quality = ["auto", "high", "medium", "low"].includes(quality) ? quality : "auto";
+  if (sceneState.quality === "auto") {
+    sceneState.resolvedQuality = "high";
+  } else {
+    sceneState.resolvedQuality = sceneState.quality;
+  }
+  applyResolvedQuality();
+  return sceneState.quality;
+}
+
+export function setPerformanceMode(enabled) {
+  sceneState.performanceMode = Boolean(enabled);
+  applyResolvedQuality();
+  return sceneState.performanceMode;
+}
+
+export function getRenderStats() {
+  const fps = Math.max(1, Math.round(1000 / Math.max(1, sceneState.frameSampleMs || 16)));
+  const quality = sceneState.quality === "auto"
+    ? `Auto:${sceneState.resolvedQuality}`
+    : sceneState.resolvedQuality;
+  return {
+    fps,
+    quality,
+    performanceMode: sceneState.performanceMode,
+  };
+}
+
+export function findSunHit(screenX, screenY, radius = 28) {
+  if (!sceneState.ready || !sceneState.camera) {
+    return null;
+  }
+
+  let bestSun = null;
+  let bestDist = radius;
+  const vector = new THREE.Vector3();
+
+  state.suns.forEach((sun) => {
+    const obj = sceneState.maps.suns.get(sun.id);
+    if (!obj) {
+      return;
+    }
+    vector.copy(obj.position);
+    vector.project(sceneState.camera);
+    const px = (vector.x * 0.5 + 0.5) * ui.canvas.width;
+    const py = (-vector.y * 0.5 + 0.5) * ui.canvas.height;
+    const dist = Math.hypot(px - screenX, py - screenY);
+    if (dist <= bestDist) {
+      bestDist = dist;
+      bestSun = sun;
+    }
+  });
+
+  return bestSun;
+}
+
+export function screenToBoardPixel(screenX, screenY) {
+  if (!sceneState.ready || !sceneState.camera) {
+    return null;
+  }
+
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2(
+    (screenX / ui.canvas.width) * 2 - 1,
+    -(screenY / ui.canvas.height) * 2 + 1
+  );
+  const boardPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 3);
+  const hitPoint = new THREE.Vector3();
+
+  raycaster.setFromCamera(pointer, sceneState.camera);
+  const hit = raycaster.ray.intersectPlane(boardPlane, hitPoint);
+  if (!hit) {
+    return null;
+  }
+
+  const x = toScreenX(hitPoint.x);
+  const y = toScreenY(hitPoint.z);
+  if (x < BOARD_X || x > BOARD_X + BOARD_W || y < BOARD_Y || y > BOARD_Y + BOARD_H) {
+    return null;
+  }
+  return { x, y };
+}
+
+export function isRenderInteractionReady() {
+  return sceneState.ready && !sceneState.initFailed;
+}

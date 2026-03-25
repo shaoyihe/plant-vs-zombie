@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plants vs Zombies Web</title>
+  <link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hud-top">
+      <div class="stat-chip">阳光 <span id="sun-count">150</span></div>
+      <div class="stat-chip">关卡 <span id="level-label">1</span></div>
+      <div class="stat-chip">进度 <span id="wave-label">0%</span></div>
+      <div class="stat-chip">性能 <span id="render-stat">FPS -- | 3D --</span></div>
+      <div class="spacer"></div>
+      <button id="pause-btn" class="control-btn">暂停</button>
+      <button id="speed-btn" class="control-btn">1x</button>
+      <button id="camera-btn" class="control-btn">镜头: 标准</button>
+      <button id="shovel-btn" class="control-btn">铲子: 关</button>
+      <button id="settings-btn" class="control-btn">设置</button>
+    </header>
+
+    <section class="cards-panel" id="cards-panel"></section>
+
+    <section class="game-stage">
+      <div class="wave-bar-wrap">
+        <div id="wave-bar" class="wave-bar"></div>
+      </div>
+      <canvas id="game-canvas" width="960" height="600"></canvas>
+      <div id="pause-cover" class="pause-cover">游戏暂停中</div>
+      <div id="toast" class="toast"></div>
+    </section>
+  </div>
+
+  <div id="menu-overlay" class="overlay visible">
+    <div class="panel">
+      <h1>植物大战僵尸网页版</h1>
+      <p>标准玩法风格，使用占位资源实现。</p>
+      <div class="menu-actions">
+        <button id="new-game-btn" class="menu-btn">开始新游戏</button>
+         <button id="endless-game-btn" class="menu-btn">无尽模式</button>
+        <button id="continue-btn" class="menu-btn">继续游戏</button>
+        <button id="menu-settings-btn" class="menu-btn">设置</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="prep-overlay" class="overlay">
+    <div class="panel prep-panel">
+      <h2 id="prep-title">本关选卡</h2>
+      <p id="prep-desc">从当前可用植物中选择最多 5 张卡牌进入战斗。</p>
+      <div id="prep-cards" class="prep-cards"></div>
+      <div class="prep-footer">
+        <span id="prep-count">已选择 0 / 5</span>
+      </div>
+      <div class="menu-actions">
+        <button id="prep-start-btn" class="menu-btn">开始战斗</button>
+        <button id="prep-cancel-btn" class="menu-btn">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="result-overlay" class="overlay">
+    <div class="panel">
+      <h2 id="result-title">胜利</h2>
+      <p id="result-desc"></p>
+       <div id="result-stats"></div>
+      <div class="menu-actions">
+        <button id="retry-btn" class="menu-btn">重开本关</button>
+        <button id="next-btn" class="menu-btn">下一关</button>
+        <button id="back-menu-btn" class="menu-btn">返回主菜单</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settings-overlay" class="overlay">
+    <div class="panel settings-panel">
+      <h2>设置</h2>
+      <label class="setting-item">
+        主音量
+        <input id="volume-input" type="range" min="0" max="1" step="0.05" value="0.5" />
+      </label>
+      <label class="setting-item">
+        默认倍速
+        <select id="default-speed-select">
+          <option value="1">1x</option>
+          <option value="2">2x</option>
+        </select>
+      </label>
+      <label class="setting-item">
+        暂停时行为
+        <select id="pause-behavior-select">
+          <option value="overlay">显示暂停遮罩</option>
+          <option value="none">保持当前画面</option>
+        </select>
+      </label>
+      <label class="setting-item">
+        3D画质
+        <select id="graphics-quality-select">
+          <option value="auto">自动</option>
+          <option value="high">高</option>
+          <option value="medium">中</option>
+          <option value="low">低</option>
+        </select>
+      </label>
+      <label class="setting-check">
+        <input id="audio-enabled-input" type="checkbox" checked />
+        启用音效
+      </label>
+      <label class="setting-check">
+        <input id="performance-mode-input" type="checkbox" />
+        性能优先模式
+      </label>
+      <div class="menu-actions">
+        <button id="save-settings-btn" class="menu-btn">保存</button>
+        <button id="cancel-settings-btn" class="menu-btn">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

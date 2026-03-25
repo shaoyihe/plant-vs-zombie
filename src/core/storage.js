@@ -1,0 +1,216 @@
+import { SAVE_KEY } from "../config/constants.js";
+import { LEVELS } from "../config/levels.js";
+import { PLANTS } from "../config/plants.js";
+import { state } from "./state.js";
+
+function clampNumber(value, fallback = 0) {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function snapshotPlants() {
+  const plants = [];
+  state.plants.forEach((row) => {
+    row.forEach((plant) => {
+      if (!plant) {
+        return;
+      }
+      plants.push({
+        id: plant.id,
+        plantId: plant.plantId,
+        row: plant.row,
+        col: plant.col,
+        hp: plant.hp,
+        fireTimer: plant.fireTimer,
+        produceTimer: plant.produceTimer,
+        fuseTimer: plant.fuseTimer,
+        armTimer: plant.armTimer,
+        armed: plant.armed,
+        attackTimer: plant.attackTimer,
+        burstQueue: plant.burstQueue,
+        burstTimer: plant.burstTimer,
+        hitFlash: plant.hitFlash,
+        action: plant.action,
+        actionTimer: plant.actionTimer,
+        animSeed: plant.animSeed,
+      });
+    });
+  });
+  return plants;
+}
+
+function snapshotZombies() {
+  return state.zombies.map((zombie) => ({
+    id: zombie.id,
+    type: zombie.type,
+    row: zombie.row,
+    x: zombie.x,
+    hp: zombie.hp,
+    maxHp: zombie.maxHp,
+    shieldHp: zombie.shieldHp,
+    baseSpeed: zombie.baseSpeed,
+    speed: zombie.speed,
+    baseDamage: zombie.baseDamage,
+    damage: zombie.damage,
+    attackTimer: zombie.attackTimer,
+    targetPlant: zombie.targetPlant,
+    slowUntil: zombie.slowUntil,
+    jumped: zombie.jumped,
+    enraged: zombie.enraged,
+    action: zombie.action,
+    hitFlash: zombie.hitFlash,
+    animSeed: zombie.animSeed,
+    propDropState: zombie.propDropState,
+    alive: zombie.alive,
+  }));
+}
+
+function snapshotProjectiles() {
+  return state.projectiles.map((projectile) => ({
+    id: projectile.id,
+    x: projectile.x,
+    y: projectile.y,
+    row: projectile.row,
+    speed: projectile.speed,
+    damage: projectile.damage,
+    slow: projectile.slow,
+    slowRatio: projectile.slowRatio,
+    slowDuration: projectile.slowDuration,
+    alive: projectile.alive,
+  }));
+}
+
+function snapshotSuns() {
+  return state.suns.map((sun) => ({
+    id: sun.id,
+    x: sun.x,
+    y: sun.y,
+    value: sun.value,
+    ttl: sun.ttl,
+    source: sun.source,
+    vy: sun.vy,
+    alive: sun.alive,
+  }));
+}
+
+function snapshotLawnMowers() {
+  return state.lawnMowers.map((mower) => ({
+    id: mower.id,
+    row: mower.row,
+    x: mower.x,
+    active: mower.active,
+    spent: mower.spent,
+    speed: mower.speed,
+  }));
+}
+
+function buildActiveRunSnapshot() {
+  return {
+    mode: state.mode,
+    levelIndex: state.levelIndex,
+    selectedLoadout: state.selectedLoadout.filter((id) => PLANTS[id]),
+    sun: state.sun,
+    speed: state.speed,
+    levelTime: state.levelTime,
+    levelWaveIndex: state.levelWaveIndex,
+    timers: {
+      naturalSun: state.timers.naturalSun,
+    },
+    endless: {
+      wave: state.endless.wave,
+      nextWaveAt: state.endless.nextWaveAt,
+    },
+    cardCooldowns: { ...state.cardCooldowns },
+    stats: { ...state.stats },
+    plants: snapshotPlants(),
+    zombies: snapshotZombies(),
+    projectiles: snapshotProjectiles(),
+    suns: snapshotSuns(),
+    lawnMowers: snapshotLawnMowers(),
+  };
+}
+
+function sanitizeActiveRun(activeRun) {
+  if (!activeRun || typeof activeRun !== "object") {
+    return null;
+  }
+
+  return {
+    mode: activeRun.mode === "endless" ? "endless" : "level",
+    levelIndex: Math.max(0, Math.min(LEVELS.length - 1, Number(activeRun.levelIndex) || 0)),
+    selectedLoadout: Array.isArray(activeRun.selectedLoadout)
+      ? activeRun.selectedLoadout.filter((id) => PLANTS[id]).slice(0, 5)
+      : [],
+    sun: clampNumber(activeRun.sun, 150),
+    speed: Number(activeRun.speed) === 2 ? 2 : 1,
+    levelTime: Math.max(0, clampNumber(activeRun.levelTime, 0)),
+    levelWaveIndex: Math.max(0, clampNumber(activeRun.levelWaveIndex, 0)),
+    timers: {
+      naturalSun: Math.max(0, clampNumber(activeRun.timers?.naturalSun, 0)),
+    },
+    endless: {
+      wave: Math.max(0, clampNumber(activeRun.endless?.wave, 0)),
+      nextWaveAt: Math.max(0, clampNumber(activeRun.endless?.nextWaveAt, 4)),
+    },
+    cardCooldowns: activeRun.cardCooldowns && typeof activeRun.cardCooldowns === "object" ? activeRun.cardCooldowns : {},
+    stats: activeRun.stats && typeof activeRun.stats === "object" ? activeRun.stats : {},
+    plants: Array.isArray(activeRun.plants) ? activeRun.plants : [],
+    zombies: Array.isArray(activeRun.zombies) ? activeRun.zombies : [],
+    projectiles: Array.isArray(activeRun.projectiles) ? activeRun.projectiles : [],
+    suns: Array.isArray(activeRun.suns) ? activeRun.suns : [],
+    lawnMowers: Array.isArray(activeRun.lawnMowers) ? activeRun.lawnMowers : [],
+  };
+}
+
+export function loadSave() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  state.hasSavedGame = Boolean(raw);
+  if (!raw) {
+    return;
+  }
+
+  try {
+    const save = JSON.parse(raw);
+    state.unlockedLevel = Math.max(1, Math.min(LEVELS.length, save.unlockedLevel || 1));
+    state.levelIndex = Math.max(0, Math.min(LEVELS.length - 1, save.lastLevelIndex || 0));
+    if (save.settings) {
+      state.settings.volume = Number(save.settings.volume ?? 0.5);
+      state.settings.defaultSpeed = Number(save.settings.defaultSpeed ?? 1);
+      state.settings.audioEnabled = Boolean(save.settings.audioEnabled ?? true);
+      state.settings.pauseBehavior = save.settings.pauseBehavior === "none" ? "none" : "overlay";
+      state.settings.graphicsQuality = ["auto", "high", "medium", "low"].includes(save.settings.graphicsQuality)
+        ? save.settings.graphicsQuality
+        : "auto";
+      state.settings.performanceMode = Boolean(save.settings.performanceMode ?? false);
+    }
+    if (Array.isArray(save.lastLoadout)) {
+      state.selectedLoadout = save.lastLoadout.filter((id) => PLANTS[id]);
+    }
+    state.savedRun = sanitizeActiveRun(save.activeRun);
+  } catch {
+    localStorage.removeItem(SAVE_KEY);
+    state.hasSavedGame = false;
+    state.savedRun = null;
+  }
+}
+
+export function saveProgress(options = {}) {
+  const { includeCurrentRun = false, clearActiveRun = false } = options;
+  let activeRun = state.savedRun;
+  if (clearActiveRun) {
+    activeRun = null;
+    state.savedRun = null;
+  } else if (includeCurrentRun) {
+    activeRun = buildActiveRunSnapshot();
+    state.savedRun = activeRun;
+  }
+
+  const payload = {
+    unlockedLevel: state.unlockedLevel,
+    lastLevelIndex: state.levelIndex,
+    settings: state.settings,
+    lastLoadout: state.selectedLoadout,
+    activeRun,
+  };
+  localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+  state.hasSavedGame = true;
+}
