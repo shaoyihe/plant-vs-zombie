@@ -1,4 +1,4 @@
-import { LEVELS } from "./config/levels.js";
+import { formatLevelShortLabel, LEVELS } from "./config/levels.js";
 import { PLANTS } from "./config/plants.js";
 import { createCellStateGrid, createGrid, state } from "./core/state.js";
 import { loadSave, saveProgress } from "./core/storage.js";
@@ -17,7 +17,7 @@ import {
 } from "./game/update.js";
 import { draw, getRenderStats, setPerformanceMode, setRenderQuality } from "./render/draw.js";
 import { ui } from "./ui/dom.js";
-import { renderCards, syncTopButtons, updateUI } from "./ui/panels.js";
+import { renderCards, renderChapterProgress, syncTopButtons, updateUI } from "./ui/panels.js";
 
 /**
  * 应用入口模块。
@@ -102,8 +102,9 @@ function boot() {
     state.cardCooldowns[id] = 0;
   });
   updateContinueButton();
+  renderChapterProgress();
   const level = LEVELS[Math.min(state.levelIndex, LEVELS.length - 1)] || LEVELS[0];
-  ui.levelLabel.textContent = String(level.id);
+  ui.levelLabel.textContent = formatLevelShortLabel(level);
   syncTopButtons();
   renderCards();
   draw();

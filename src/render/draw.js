@@ -71,6 +71,10 @@ const BASE_BACKGROUND = new THREE.Color(0xa5d07a);
 const DOOM_BACKGROUND = new THREE.Color(0x33263f);
 const BASE_FOG = new THREE.Color(0xa5d07a);
 const DOOM_FOG = new THREE.Color(0x3f334a);
+const PLANT_DAMAGE_TINT = new THREE.Color(0x516332);
+const PLANT_CRITICAL_TINT = new THREE.Color(0x6b6e2f);
+const ZOMBIE_DAMAGE_TINT = new THREE.Color(0x69544a);
+const ZOMBIE_CRITICAL_TINT = new THREE.Color(0x8a5b43);
 
 function getEffectivePreset() {
   const base = QUALITY_PRESETS[sceneState.resolvedQuality] || QUALITY_PRESETS.high;
@@ -266,6 +270,12 @@ function supportsEmissive(material) {
 function enableShadow(mesh, receive = false) {
   mesh.castShadow = true;
   mesh.receiveShadow = receive;
+}
+
+function rememberMaterialColor(mesh) {
+  if (mesh?.material?.color) {
+    mesh.userData.baseColor = mesh.material.color.getHex();
+  }
 }
 
 function makeLawnTexture() {
@@ -720,7 +730,50 @@ function createPlantObject(plant) {
   shadow.userData.part = "shadow";
   group.add(shadow);
 
+  const woundA = new THREE.Mesh(new THREE.BoxGeometry(5.8, 1, 0.8), makeMaterial(0x4f3218, 0.84));
+  const woundB = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1, 0.8), makeMaterial(0x4f3218, 0.84));
+  woundA.position.set(-4.5, 8.8, 11.4);
+  woundB.position.set(4.2, 3.8, 11.1);
+  woundA.rotation.z = -0.45;
+  woundB.rotation.z = 0.35;
+  woundA.userData.part = "woundA";
+  woundB.userData.part = "woundB";
+  woundA.visible = false;
+  woundB.visible = false;
+  group.add(woundA);
+  group.add(woundB);
+
+  const hpAnchor = new THREE.Group();
+  hpAnchor.position.set(0, 30, 0);
+  hpAnchor.userData.part = "hpAnchor";
+  const hpFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(24, 4.2, 1),
+    new THREE.MeshBasicMaterial({ color: 0x2a2219, transparent: true, opacity: 0.78 })
+  );
+  hpFrame.userData.part = "hpFrame";
+  const hpBack = new THREE.Mesh(
+    new THREE.BoxGeometry(21, 1.8, 0.8),
+    new THREE.MeshBasicMaterial({ color: 0x6f3826, transparent: true, opacity: 0.82 })
+  );
+  hpBack.position.z = 0.12;
+  hpBack.userData.part = "hpBack";
+  const hpFill = new THREE.Mesh(
+    new THREE.BoxGeometry(21, 1.8, 0.8),
+    new THREE.MeshBasicMaterial({ color: 0x7cd25f, transparent: true, opacity: 0.92 })
+  );
+  hpFill.position.set(0, 0, 0.28);
+  hpFill.userData.part = "hpFill";
+  hpAnchor.add(hpFrame);
+  hpAnchor.add(hpBack);
+  hpAnchor.add(hpFill);
+  group.add(hpAnchor);
+
   group.userData.kind = "plant";
+  group.traverse((child) => {
+    if (child.isMesh) {
+      rememberMaterialColor(child);
+    }
+  });
   return group;
 }
 
@@ -732,6 +785,7 @@ function createZombieObject(zombie) {
   shirt.position.y = 4;
   enableShadow(shirt);
   shirt.userData.part = "shirt";
+  rememberMaterialColor(shirt);
   group.add(shirt);
 
   const body = new THREE.Mesh(new THREE.CylinderGeometry(10.2, 12.6, 31, 14), makeMaterial(def.color, 0.62));
@@ -739,6 +793,7 @@ function createZombieObject(zombie) {
   body.scale.set(1.05, 1, 0.92);
   enableShadow(body);
   body.userData.part = "body";
+  rememberMaterialColor(body);
   group.add(body);
 
   const shoulder = new THREE.Mesh(new THREE.SphereGeometry(12.8, 12, 12), makeMaterial(def.color, 0.64));
@@ -746,6 +801,7 @@ function createZombieObject(zombie) {
   shoulder.scale.set(1.18, 0.82, 0.92);
   enableShadow(shoulder);
   shoulder.userData.part = "shoulder";
+  rememberMaterialColor(shoulder);
   group.add(shoulder);
 
   const hip = new THREE.Mesh(new THREE.SphereGeometry(10.8, 12, 12), makeMaterial(def.color, 0.64));
@@ -753,6 +809,7 @@ function createZombieObject(zombie) {
   hip.scale.set(1.06, 0.78, 0.9);
   enableShadow(hip);
   hip.userData.part = "hip";
+  rememberMaterialColor(hip);
   group.add(hip);
 
   const coatL = new THREE.Mesh(new THREE.SphereGeometry(6.2, 10, 10), makeMaterial(def.color, 0.66));
@@ -765,6 +822,8 @@ function createZombieObject(zombie) {
   coatR.userData.part = "coatR";
   enableShadow(coatL);
   enableShadow(coatR);
+  rememberMaterialColor(coatL);
+  rememberMaterialColor(coatR);
   group.add(coatL);
   group.add(coatR);
 
@@ -773,6 +832,7 @@ function createZombieObject(zombie) {
   head.scale.set(1.02, 1.08, 0.98);
   enableShadow(head);
   head.userData.part = "head";
+  rememberMaterialColor(head);
   group.add(head);
 
   const jaw = new THREE.Mesh(new THREE.SphereGeometry(5.4, 10, 10), makeMaterial(0xc7b99e, 0.7));
@@ -780,6 +840,7 @@ function createZombieObject(zombie) {
   jaw.scale.set(1.05, 0.48, 0.82);
   jaw.userData.part = "jaw";
   enableShadow(jaw);
+  rememberMaterialColor(jaw);
   group.add(jaw);
 
   const teeth = new THREE.Mesh(
@@ -789,6 +850,7 @@ function createZombieObject(zombie) {
   teeth.position.set(0.1, 22.1, 10.8);
   teeth.userData.part = "teeth";
   enableShadow(teeth);
+  rememberMaterialColor(teeth);
   group.add(teeth);
 
   const nose = new THREE.Mesh(new THREE.SphereGeometry(2.9, 8, 8), makeMaterial(0xd3c1a7, 0.72));
@@ -796,6 +858,7 @@ function createZombieObject(zombie) {
   nose.scale.set(1.18, 0.78, 1.55);
   nose.userData.part = "nose";
   enableShadow(nose);
+  rememberMaterialColor(nose);
   group.add(nose);
 
   const hair = new THREE.Mesh(new THREE.ConeGeometry(2.8, 7, 6), makeMaterial(0x4b3a21, 0.8));
@@ -803,6 +866,7 @@ function createZombieObject(zombie) {
   hair.rotation.z = 0.4;
   enableShadow(hair);
   hair.userData.part = "hair";
+  rememberMaterialColor(hair);
   group.add(hair);
 
   const danceHair = new THREE.Mesh(new THREE.BoxGeometry(14, 3, 10), makeMaterial(0x22181c, 0.82));
@@ -810,6 +874,7 @@ function createZombieObject(zombie) {
   danceHair.userData.part = "danceHair";
   danceHair.visible = zombie.type === "dancing";
   enableShadow(danceHair);
+  rememberMaterialColor(danceHair);
   group.add(danceHair);
 
   addSimpleEyes(group, 29, 8.8, 0.74);
@@ -822,6 +887,8 @@ function createZombieObject(zombie) {
   enableShadow(armR);
   armL.userData.part = "armL";
   armR.userData.part = "armR";
+  rememberMaterialColor(armL);
+  rememberMaterialColor(armR);
   group.add(armL);
   group.add(armR);
 
@@ -835,6 +902,8 @@ function createZombieObject(zombie) {
   sleeveR.userData.part = "sleeveR";
   enableShadow(sleeveL);
   enableShadow(sleeveR);
+  rememberMaterialColor(sleeveL);
+  rememberMaterialColor(sleeveR);
   group.add(sleeveL);
   group.add(sleeveR);
 
@@ -846,6 +915,8 @@ function createZombieObject(zombie) {
   handR.userData.part = "handR";
   enableShadow(handL);
   enableShadow(handR);
+  rememberMaterialColor(handL);
+  rememberMaterialColor(handR);
   group.add(handL);
   group.add(handR);
 
@@ -857,6 +928,8 @@ function createZombieObject(zombie) {
   enableShadow(legR);
   legL.userData.part = "legL";
   legR.userData.part = "legR";
+  rememberMaterialColor(legL);
+  rememberMaterialColor(legR);
   group.add(legL);
   group.add(legR);
 
@@ -870,8 +943,61 @@ function createZombieObject(zombie) {
   enableShadow(footR);
   footL.userData.part = "footL";
   footR.userData.part = "footR";
+  rememberMaterialColor(footL);
+  rememberMaterialColor(footR);
   group.add(footL);
   group.add(footR);
+
+  const woundA = new THREE.Mesh(new THREE.BoxGeometry(6.5, 1.1, 0.9), makeMaterial(0x4d231f, 0.84));
+  const woundB = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.1, 0.9), makeMaterial(0x4d231f, 0.84));
+  const woundC = new THREE.Mesh(new THREE.BoxGeometry(5.8, 1.1, 0.9), makeMaterial(0x4d231f, 0.84));
+  woundA.position.set(-4.5, 9, 11.4);
+  woundB.position.set(4.5, 28.5, 10.8);
+  woundC.position.set(0.5, -2.5, 11.2);
+  woundA.rotation.z = -0.42;
+  woundB.rotation.z = 0.3;
+  woundC.rotation.z = -0.18;
+  woundA.userData.part = "woundA";
+  woundB.userData.part = "woundB";
+  woundC.userData.part = "woundC";
+  woundA.visible = false;
+  woundB.visible = false;
+  woundC.visible = false;
+  group.add(woundA);
+  group.add(woundB);
+  group.add(woundC);
+
+  const hpAnchor = new THREE.Group();
+  hpAnchor.position.set(0, 55, 0);
+  hpAnchor.userData.part = "hpAnchor";
+  const hpFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(30, 4.8, 1.2),
+    new THREE.MeshBasicMaterial({ color: 0x2f261d, transparent: true, opacity: 0.82 })
+  );
+  hpFrame.userData.part = "hpFrame";
+  const hpBack = new THREE.Mesh(
+    new THREE.BoxGeometry(27, 2.2, 1),
+    new THREE.MeshBasicMaterial({ color: 0x6a3028, transparent: true, opacity: 0.86 })
+  );
+  hpBack.position.z = 0.18;
+  hpBack.userData.part = "hpBack";
+  const hpFill = new THREE.Mesh(
+    new THREE.BoxGeometry(27, 2.2, 1),
+    new THREE.MeshBasicMaterial({ color: 0x7cd25f, transparent: true, opacity: 0.95 })
+  );
+  hpFill.position.set(0, 0, 0.42);
+  hpFill.userData.part = "hpFill";
+  const shieldFill = new THREE.Mesh(
+    new THREE.BoxGeometry(27, 1.1, 0.9),
+    new THREE.MeshBasicMaterial({ color: 0x8fd7f0, transparent: true, opacity: 0.9 })
+  );
+  shieldFill.position.set(0, -2.9, 0.4);
+  shieldFill.userData.part = "shieldFill";
+  hpAnchor.add(hpFrame);
+  hpAnchor.add(hpBack);
+  hpAnchor.add(hpFill);
+  hpAnchor.add(shieldFill);
+  group.add(hpAnchor);
 
   if (zombie.type === "conehead") {
     const cone = new THREE.Mesh(new THREE.ConeGeometry(10, 22, 16), makeMaterial(0xd98d2f, 0.6));
@@ -1039,6 +1165,11 @@ function createZombieObject(zombie) {
   group.add(shadow);
 
   group.userData.kind = "zombie";
+  group.traverse((child) => {
+    if (child.isMesh) {
+      rememberMaterialColor(child);
+    }
+  });
   return group;
 }
 
@@ -1185,6 +1316,9 @@ function updateHoverPreview() {
         child.material.transparent = true;
         child.material.opacity = child.userData.part === "shadow" ? 0.12 : 0.42;
       }
+      if (child.userData.part === "hpAnchor" || child.userData.part === "woundA" || child.userData.part === "woundB") {
+        child.visible = false;
+      }
     });
     group.userData.previewPlant = previewPlant;
     group.userData.previewPlantId = state.selectedPlant;
@@ -1227,13 +1361,15 @@ function syncMap(items, map, group, createFn, updateFn) {
 function updatePlantObject(plant, obj) {
   const def = PLANTS[plant.plantId];
   const hpRatio = Math.max(0, Math.min(1, plant.hp / Math.max(1, def.hp)));
+  const damageBlend = Math.max(0, 1 - hpRatio);
   const wobble = Math.sin((state.levelTime || 0) * 2.8 + (plant.animSeed || 0)) * 0.06;
   const flash = Math.max(0, plant.hitFlash || 0);
+  const hitJolt = flash > 0 ? Math.sin(flash * 75 + (plant.animSeed || 0)) * (1.8 + flash * 4) : 0;
   const actionScale = plant.action === "attack" ? 1.08 : plant.action === "produce" ? 1.12 : plant.action === "hurt" ? 0.95 : 1;
   const digestRatio = plant.plantId === "chomper" ? Math.max(0, Math.min(1, (plant.attackTimer || 0) / Math.max(1, def.chewTime || 1))) : 0;
 
-  obj.position.set(toWorldX(plant.x), 10 + plant.row * 0.2, toWorldY(plant.y));
-  obj.rotation.z = wobble;
+  obj.position.set(toWorldX(plant.x) + hitJolt, 10 + plant.row * 0.2 + flash * 2.1, toWorldY(plant.y));
+  obj.rotation.z = wobble + hitJolt * 0.01 - damageBlend * 0.04;
   obj.scale.set(actionScale, actionScale, actionScale);
 
   const head = obj.children.find((child) => child.userData.part === "head");
@@ -1259,9 +1395,14 @@ function updatePlantObject(plant, obj) {
   const bottomHead = obj.children.find((child) => child.userData.part === "bottomHead");
   const topMuzzle = obj.children.find((child) => child.userData.part === "topMuzzle");
   const bottomMuzzle = obj.children.find((child) => child.userData.part === "bottomMuzzle");
+  const woundA = obj.children.find((child) => child.userData.part === "woundA");
+  const woundB = obj.children.find((child) => child.userData.part === "woundB");
+  const hpAnchor = obj.children.find((child) => child.userData.part === "hpAnchor");
+  const hpFill = hpAnchor?.children.find((child) => child.userData.part === "hpFill");
+
   if (head) {
     const nod = plant.action === "attack" ? -0.3 : plant.action === "hurt" ? 0.22 : 0;
-    head.rotation.z = nod + wobble * 2.2;
+    head.rotation.z = nod + wobble * 2.2 - damageBlend * 0.08;
     const baseY = plant.plantId === "wallnut" ? 8 : plant.plantId === "tallnut" ? 16 : plant.plantId === "potatomine" ? -2 : plant.plantId === "squash" ? 8 : 10;
     head.position.y = baseY + Math.sin((state.levelTime || 0) * 5 + (plant.animSeed || 0)) * (plant.action === "produce" ? 2.4 : 0.6);
     if (plant.plantId === "sunflower") {
@@ -1302,16 +1443,15 @@ function updatePlantObject(plant, obj) {
       head.position.y = 10 + Math.sin((state.levelTime || 0) * 3.2 + (plant.animSeed || 0)) * 0.6;
     }
   }
+
   if (stem) {
-    stem.rotation.z = wobble * 1.35;
+    stem.rotation.z = wobble * 1.35 - damageBlend * 0.1;
   }
   if (muzzle) {
-    const stretch = plant.action === "attack" ? 1.15 : 1;
-    muzzle.scale.set(stretch, 1, 1);
+    muzzle.scale.set(plant.action === "attack" ? 1.15 : 1, 1, 1);
   }
   if (muzzle2) {
-    const stretch = plant.action === "attack" ? 1.2 : 1;
-    muzzle2.scale.set(stretch, 1, 1);
+    muzzle2.scale.set(plant.action === "attack" ? 1.2 : 1, 1, 1);
     muzzle2.position.y = 6 + Math.sin((state.levelTime || 0) * 7 + (plant.animSeed || 0)) * 0.7;
   }
   if (crackA) {
@@ -1386,9 +1526,33 @@ function updatePlantObject(plant, obj) {
   if (bottomMuzzle) {
     bottomMuzzle.scale.set(plant.action === "attack" ? 1.14 : 1, 1, 1);
   }
+  if (woundA) {
+    woundA.visible = hpRatio < 0.68 && plant.plantId !== "spikeweed";
+  }
+  if (woundB) {
+    woundB.visible = hpRatio < 0.38 && plant.plantId !== "spikeweed";
+  }
+  if (hpAnchor) {
+    hpAnchor.visible = hpRatio < 0.999 || flash > 0.02;
+    hpAnchor.position.y = (plant.plantId === "tallnut" ? 52 : plant.plantId === "spikeweed" ? 12 : 30) + Math.abs(wobble) * 5;
+    hpAnchor.rotation.y = -0.15;
+  }
+  if (hpFill) {
+    hpFill.scale.x = Math.max(0.001, hpRatio);
+    hpFill.position.x = -10.5 * (1 - hpRatio);
+  }
 
   obj.traverse((child) => {
     if (child.isMesh && child.material && child.material.color) {
+      if (child.userData.baseColor !== undefined) {
+        child.material.color.setHex(child.userData.baseColor);
+        if (!["hpFrame", "hpBack", "hpFill", "shadow", "spark", "flame"].includes(child.userData.part)) {
+          child.material.color.lerp(PLANT_DAMAGE_TINT, Math.min(0.34, damageBlend * 0.24));
+          if (hpRatio < 0.28 && ["head", "stem", "muzzle", "muzzle2", "topHead", "bottomHead"].includes(child.userData.part)) {
+            child.material.color.lerp(PLANT_CRITICAL_TINT, (0.28 - hpRatio) * 1.7);
+          }
+        }
+      }
       if (supportsEmissive(child.material)) {
         const baseEmissive = plant.plantId === "snowpea" ? 0x4aa7c8 : 0x000000;
         child.material.emissive.setHex(baseEmissive);
@@ -1396,6 +1560,10 @@ function updatePlantObject(plant, obj) {
       }
     }
   });
+
+  if (hpFill) {
+    hpFill.material.color.setHex(hpRatio < 0.3 ? 0xd4563d : hpRatio < 0.6 ? 0xe7b34c : 0x7cd25f);
+  }
 }
 
 function updateZombieObject(zombie, obj) {
@@ -1404,9 +1572,14 @@ function updateZombieObject(zombie, obj) {
   const phase = Math.sin(t * pace + (zombie.animSeed || 0));
   const secondaryPhase = Math.cos(t * (pace * 0.65) + (zombie.animSeed || 0));
   const flash = Math.max(0, zombie.hitFlash || 0);
+  const hitJolt = flash > 0 ? Math.sin(flash * 70 + (zombie.animSeed || 0)) * (2.8 + flash * 6) : 0;
 
-  obj.position.set(toWorldX(zombie.x), 10 + zombie.row * 0.2, toWorldY(BOARD_Y + zombie.row * CELL_H + CELL_H / 2));
-  obj.rotation.z = phase * 0.05;
+  obj.position.set(
+    toWorldX(zombie.x) + hitJolt,
+    10 + zombie.row * 0.2 + flash * 3.2,
+    toWorldY(BOARD_Y + zombie.row * CELL_H + CELL_H / 2)
+  );
+  obj.rotation.z = phase * 0.05 + hitJolt * 0.01;
 
   const armL = obj.children.find((child) => child.userData.part === "armL");
   const armR = obj.children.find((child) => child.userData.part === "armR");
@@ -1443,7 +1616,16 @@ function updateZombieObject(zombie, obj) {
   const pickaxe = obj.children.find((child) => child.userData.part === "pickaxe");
   const pickHead = obj.children.find((child) => child.userData.part === "pickHead");
   const mound = obj.children.find((child) => child.userData.part === "mound");
+  const woundA = obj.children.find((child) => child.userData.part === "woundA");
+  const woundB = obj.children.find((child) => child.userData.part === "woundB");
+  const woundC = obj.children.find((child) => child.userData.part === "woundC");
+  const hpAnchor = obj.children.find((child) => child.userData.part === "hpAnchor");
+  const hpFill = hpAnchor?.children.find((child) => child.userData.part === "hpFill");
+  const shieldFill = hpAnchor?.children.find((child) => child.userData.part === "shieldFill");
   const hpRatio = zombie.hp / Math.max(1, zombie.maxHp);
+  const clampedHpRatio = Math.max(0, Math.min(1, hpRatio));
+  const shieldRatio = zombie.shieldHp > 0 ? Math.max(0, Math.min(1, zombie.shieldHp / Math.max(1, ZOMBIES[zombie.type].shieldHp || zombie.shieldHp))) : 0;
+  const damageBlend = Math.max(0, 1 - clampedHpRatio);
   const isBiting = zombie.action === "bite";
   const isHurt = zombie.action === "hurt";
   const isSummoning = zombie.action === "summon";
@@ -1492,6 +1674,7 @@ function updateZombieObject(zombie, obj) {
   }
   if (body) {
     body.rotation.z = isSummoning ? phase * 0.1 : isBiting ? -0.08 : 0;
+    body.scale.set(1.05, 1 - damageBlend * 0.06 + flash * 0.04, 0.92);
   }
   if (jaw) {
     jaw.rotation.x = isBiting ? 0.5 + Math.abs(phase) * 0.3 : 0.18 + Math.abs(secondaryPhase) * 0.04;
@@ -1603,6 +1786,30 @@ function updateZombieObject(zombie, obj) {
     mound.visible = isUnderground;
     mound.scale.y = 0.32 + Math.abs(phase) * 0.08;
   }
+  if (woundA) {
+    woundA.visible = !isUnderground && clampedHpRatio < 0.78;
+  }
+  if (woundB) {
+    woundB.visible = !isUnderground && clampedHpRatio < 0.5;
+  }
+  if (woundC) {
+    woundC.visible = !isUnderground && clampedHpRatio < 0.26;
+  }
+  if (hpAnchor) {
+    hpAnchor.visible = !isUnderground && (clampedHpRatio < 0.999 || shieldRatio > 0 || flash > 0.02);
+    hpAnchor.position.y = 55 + Math.abs(phase) * 0.8;
+    hpAnchor.rotation.y = -0.2;
+  }
+  if (hpFill) {
+    hpFill.scale.x = Math.max(0.001, clampedHpRatio);
+    hpFill.position.x = -13.5 * (1 - clampedHpRatio);
+    hpFill.material.color.setHex(clampedHpRatio < 0.3 ? 0xd4563d : clampedHpRatio < 0.6 ? 0xe7b34c : 0x7cd25f);
+  }
+  if (shieldFill) {
+    shieldFill.visible = shieldRatio > 0;
+    shieldFill.scale.x = Math.max(0.001, shieldRatio);
+    shieldFill.position.x = -13.5 * (1 - shieldRatio);
+  }
 
   obj.traverse((child) => {
     if (child.userData.shield) {
@@ -1647,11 +1854,24 @@ function updateZombieObject(zombie, obj) {
         "helmet",
         "helmetVisor",
         "pads",
+        "hpAnchor",
+        "woundA",
+        "woundB",
+        "woundC",
       ].includes(child.userData.part)
     ) {
       child.visible = false;
     }
     if (child.isMesh && child.material) {
+      if (child.material.color && child.userData.baseColor !== undefined) {
+        child.material.color.setHex(child.userData.baseColor);
+        if (!["hpFrame", "hpBack", "hpFill", "shieldFill", "flagCloth"].includes(child.userData.part)) {
+          child.material.color.lerp(ZOMBIE_DAMAGE_TINT, Math.min(0.38, damageBlend * 0.26));
+          if (clampedHpRatio < 0.28 && ["body", "head", "shirt", "jaw", "coatL", "coatR"].includes(child.userData.part)) {
+            child.material.color.lerp(ZOMBIE_CRITICAL_TINT, (0.28 - clampedHpRatio) * 1.6);
+          }
+        }
+      }
       if (supportsEmissive(child.material)) {
         if (state.levelTime <= zombie.slowUntil) {
           child.material.emissive.setHex(0x7bc8ff);
@@ -1928,6 +2148,160 @@ function rebuildEffects() {
       return;
     }
 
+    if (effect.type === "damage-burst") {
+      const color =
+        effect.variant === "snowpea" || effect.variant === "ice" ? 0x9fe8ff :
+        effect.variant === "shield" ? 0xd7edf6 :
+        effect.variant === "fire" ? 0xff9b43 :
+        effect.variant === "plant" ? 0xa8f28e :
+        effect.variant === "cherrybomb" ? 0xff6f7b :
+        effect.variant === "doomshroom" ? 0xb18cff :
+        effect.variant === "potatomine" ? 0xffd36e :
+        effect.variant === "squash" ? 0xb8dd58 :
+        effect.variant === "spikeweed" ? 0xbecb7d :
+        effect.variant === "repeater" ? 0x8ae067 :
+        effect.variant === "threepeater" ? 0x73d86e :
+        0xffefb8;
+      const strength = Math.max(0.7, Math.min(1.6, (effect.amount || 20) / 36));
+      const ttlRatio = Math.max(0, Math.min(1, effect.ttl / 0.24));
+      if (["peashooter", "snowpea", "fire", "normal", "plant", "shield"].includes(effect.variant)) {
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(4.5 + strength * 1.4, 1.2 + strength * 0.2, 8, 18),
+          new THREE.MeshBasicMaterial({ color, transparent: true, opacity: Math.max(0, effect.ttl * 3.4) })
+        );
+        ring.position.set(toWorldX(effect.x), 12 + strength * 2, toWorldY(effect.y));
+        ring.rotation.x = Math.PI / 2;
+        ring.scale.setScalar(1 + (1 - ttlRatio) * 0.7);
+        group.add(ring);
+      }
+      if (effect.variant === "repeater") {
+        [-1, 1].forEach((offset) => {
+          const trail = new THREE.Mesh(
+            new THREE.BoxGeometry(10 + strength * 4.5, 1.2 + strength * 0.18, 1),
+            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: Math.max(0, effect.ttl * 2.3) })
+          );
+          trail.position.set(toWorldX(effect.x - 6 - strength * 3), 12.5 + offset * 1.4, toWorldY(effect.y + offset * 2.2));
+          trail.rotation.z = offset * 0.12;
+          group.add(trail);
+        });
+        [-1, 1].forEach((offset) => {
+          const core = new THREE.Mesh(
+            new THREE.SphereGeometry(2.1 + strength * 0.5, 8, 8),
+            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: Math.max(0, effect.ttl * 3.1) })
+          );
+          core.position.set(toWorldX(effect.x + offset * 5), 12.5, toWorldY(effect.y + offset * 2));
+          group.add(core);
+        });
+      } else if (effect.variant === "threepeater") {
+        [-1, 0, 1].forEach((offset) => {
+          const leaf = new THREE.Mesh(
+            new THREE.SphereGeometry(2.3 + strength * 0.35, 8, 8, 0, Math.PI),
+            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: Math.max(0, effect.ttl * 2.8), side: THREE.DoubleSide })
+          );
+          leaf.position.set(toWorldX(effect.x + offset * 6), 12.2 + Math.abs(offset) * 1.5, toWorldY(effect.y + offset * 5));
+          leaf.rotation.set(Math.PI / 2, offset * 0.45, Math.PI / 2 + offset * 0.35);
+          leaf.scale.set(1.9, 0.9, 1.2);
+          group.add(leaf);
+        });
+        [-1, 0, 1].forEach((offset) => {
+          const core = new THREE.Mesh(
+            new THREE.SphereGeometry(1.9 + strength * 0.45, 8, 8),
+            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: Math.max(0, effect.ttl * 3.1) })
+          );
+          core.position.set(toWorldX(effect.x + offset * 5), 12.5 + Math.abs(offset) * 1.2, toWorldY(effect.y + offset * 4));
+          group.add(core);
+        });
+      } else if (effect.variant === "spikeweed") {
+        for (let index = 0; index < 4; index += 1) {
+          const spike = new THREE.Mesh(
+            new THREE.ConeGeometry(1.6 + strength * 0.35, 8 + strength * 2.2, 6),
+            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: Math.max(0, effect.ttl * 2.8) })
+          );
+          spike.position.set(toWorldX(effect.x - 8 + index * 5), 4 + index * 0.4, toWorldY(effect.y + (index % 2 === 0 ? -2 : 2)));
+          spike.rotation.z = Math.PI;
+          group.add(spike);
+        }
+      } else if (effect.variant === "potatomine" || effect.variant === "cherrybomb" || effect.variant === "doomshroom" || effect.variant === "squash") {
+        if (effect.variant === "cherrybomb") {
+          [-1, 1].forEach((offset) => {
+            const cherry = new THREE.Mesh(
+              new THREE.SphereGeometry(3.1 + strength * 0.55, 10, 10),
+              new THREE.MeshBasicMaterial({ color: 0xff7a88, transparent: true, opacity: Math.max(0, effect.ttl * 2.7) })
+            );
+            cherry.position.set(toWorldX(effect.x + offset * 5), 12.5, toWorldY(effect.y + offset * 3));
+            group.add(cherry);
+          });
+          const stem = new THREE.Mesh(
+            new THREE.TorusGeometry(5.4 + strength * 1.1, 0.8, 6, 14, Math.PI),
+            new THREE.MeshBasicMaterial({ color: 0x8fd06f, transparent: true, opacity: Math.max(0, effect.ttl * 2.1) })
+          );
+          stem.position.set(toWorldX(effect.x), 18.5, toWorldY(effect.y));
+          stem.rotation.z = Math.PI;
+          group.add(stem);
+        }
+        if (effect.variant === "doomshroom") {
+          const halo = new THREE.Mesh(
+            new THREE.TorusGeometry(9 + strength * 4, 1.8 + strength * 0.35, 10, 24),
+            new THREE.MeshBasicMaterial({ color: 0xc8a0ff, transparent: true, opacity: Math.max(0, effect.ttl * 2.5) })
+          );
+          halo.position.set(toWorldX(effect.x), 11.5, toWorldY(effect.y));
+          halo.rotation.x = Math.PI / 2;
+          halo.scale.setScalar(1 + (1 - ttlRatio) * 0.9);
+          group.add(halo);
+          for (let puffIndex = 0; puffIndex < 3; puffIndex += 1) {
+            const smoke = new THREE.Mesh(
+              new THREE.SphereGeometry(3.4 + puffIndex * 0.8 + strength * 0.35, 8, 8),
+              new THREE.MeshBasicMaterial({ color: 0x6e4a8f, transparent: true, opacity: Math.max(0, effect.ttl * 1.65) })
+            );
+            smoke.position.set(
+              toWorldX(effect.x + (puffIndex - 1) * 6),
+              14 + puffIndex * 2,
+              toWorldY(effect.y + (puffIndex - 1) * 4)
+            );
+            smoke.scale.set(1.25, 0.8, 1.1);
+            group.add(smoke);
+          }
+        }
+        const shardCount = effect.variant === "doomshroom" ? 7 : effect.variant === "cherrybomb" ? 6 : 5;
+        for (let index = 0; index < shardCount; index += 1) {
+          const angle = (index / shardCount) * Math.PI * 2 + (1 - ttlRatio) * 0.3;
+          const shard = new THREE.Mesh(
+            new THREE.BoxGeometry(1.8 + strength, 6 + strength * 3.4, 1.1),
+            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: Math.max(0, effect.ttl * 3) })
+          );
+          shard.position.set(
+            toWorldX(effect.x + Math.cos(angle) * (6 + strength * 5.5)),
+            12 + Math.sin(angle * 1.5) * 2.2,
+            toWorldY(effect.y + Math.sin(angle) * (5 + strength * 3))
+          );
+          shard.rotation.set(angle * 0.25, angle, Math.PI / 3 + angle);
+          group.add(shard);
+        }
+      } else {
+        for (let index = 0; index < 5; index += 1) {
+          const angle = (index / 5) * Math.PI * 2 + (1 - ttlRatio) * 0.45;
+          const star = new THREE.Mesh(
+            new THREE.BoxGeometry(1.4 + strength * 0.8, 8 + strength * 4, 1),
+            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: Math.max(0, effect.ttl * 3) })
+          );
+          star.position.set(
+            toWorldX(effect.x + Math.cos(angle) * (4 + strength * 5)),
+            12 + Math.sin(angle * 2) * 2,
+            toWorldY(effect.y + Math.sin(angle) * (3 + strength * 2.5))
+          );
+          star.rotation.set(0, angle, Math.PI / 2.8 + angle);
+          group.add(star);
+        }
+      }
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(2.2 + strength * 0.6, 8, 8),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: Math.max(0, effect.ttl * 3.2) })
+      );
+      core.position.set(toWorldX(effect.x), 12, toWorldY(effect.y));
+      group.add(core);
+      return;
+    }
+
     if (effect.type === "hit" || effect.type === "ice-hit" || effect.type === "shield-hit" || effect.type === "fire-hit") {
       const color = effect.type === "ice-hit" ? 0xa7e9ff : effect.type === "shield-hit" ? 0xdaebf1 : effect.type === "fire-hit" ? 0xff9d42 : 0xffefb2;
       const mesh = new THREE.Mesh(
@@ -2088,6 +2462,19 @@ function drawFallback2D() {
   }
 }
 
+function failScene(error) {
+  sceneState.ready = false;
+  sceneState.initFailed = true;
+  sceneState.initError = error instanceof Error ? error.message : String(error || "Unknown render error");
+  if (sceneState.renderer) {
+    try {
+      sceneState.renderer.dispose();
+    } catch {
+      // Ignore disposal errors and continue with fallback rendering.
+    }
+  }
+}
+
 /**
  * 主渲染函数，每帧调用一次。
  * 将 state 中的实体同步到 Three.js 对象呈，并执行场景渲染。
@@ -2098,48 +2485,53 @@ export function draw() {
     return;
   }
 
-  if (!sceneState.ready && !sceneState.initFailed) {
-    initScene();
-  }
-
-  if (!sceneState.ready) {
-    drawFallback2D();
-    return;
-  }
-
-  resizeRendererIfNeeded();
-
-  const now = performance.now();
-  if (sceneState.lastFrameAt > 0) {
-    const frameMs = now - sceneState.lastFrameAt;
-    sceneState.frameSampleMs = sceneState.frameSampleMs * 0.92 + frameMs * 0.08;
-  }
-  sceneState.lastFrameAt = now;
-  resolveAutoQualityByFrameTime();
-
-  syncMap(state.lawnMowers, sceneState.maps.mowers, sceneState.groups.mowers, createMowerObject, updateMowerObject);
-  syncMap(state.plants.flat().filter(Boolean), sceneState.maps.plants, sceneState.groups.plants, createPlantObject, updatePlantObject);
-  syncMap(state.zombies, sceneState.maps.zombies, sceneState.groups.zombies, createZombieObject, updateZombieObject);
-  syncMap(state.projectiles, sceneState.maps.projectiles, sceneState.groups.projectiles, createProjectileObject, updateProjectileObject);
-  syncMap(state.suns, sceneState.maps.suns, sceneState.groups.suns, createSunObject, updateSunObject);
-  rebuildEffects();
-  updateHoverPreview();
-  updateCameraAndShake();
-
-  const doomPulse = state.effects.reduce((maxValue, effect) => {
-    if (effect.type !== "doom-blast") {
-      return maxValue;
+  try {
+    if (!sceneState.ready && !sceneState.initFailed) {
+      initScene();
     }
-    return Math.max(maxValue, Math.max(0, effect.ttl / 0.58));
-  }, 0);
-  const sceneFlash = Math.min(1, doomPulse * 0.9);
-  sceneState.scene.background.copy(BASE_BACKGROUND).lerp(DOOM_BACKGROUND, sceneFlash * 0.72);
-  if (sceneState.scene.fog) {
-    sceneState.scene.fog.color.copy(BASE_FOG).lerp(DOOM_FOG, sceneFlash * 0.68);
-  }
-  sceneState.renderer.toneMappingExposure = (sceneState.resolvedQuality === "low" ? 0.95 : 1.02) - sceneFlash * 0.24;
 
-  sceneState.renderer.render(sceneState.scene, sceneState.camera);
+    if (!sceneState.ready) {
+      drawFallback2D();
+      return;
+    }
+
+    resizeRendererIfNeeded();
+
+    const now = performance.now();
+    if (sceneState.lastFrameAt > 0) {
+      const frameMs = now - sceneState.lastFrameAt;
+      sceneState.frameSampleMs = sceneState.frameSampleMs * 0.92 + frameMs * 0.08;
+    }
+    sceneState.lastFrameAt = now;
+    resolveAutoQualityByFrameTime();
+
+    syncMap(state.lawnMowers, sceneState.maps.mowers, sceneState.groups.mowers, createMowerObject, updateMowerObject);
+    syncMap(state.plants.flat().filter(Boolean), sceneState.maps.plants, sceneState.groups.plants, createPlantObject, updatePlantObject);
+    syncMap(state.zombies, sceneState.maps.zombies, sceneState.groups.zombies, createZombieObject, updateZombieObject);
+    syncMap(state.projectiles, sceneState.maps.projectiles, sceneState.groups.projectiles, createProjectileObject, updateProjectileObject);
+    syncMap(state.suns, sceneState.maps.suns, sceneState.groups.suns, createSunObject, updateSunObject);
+    rebuildEffects();
+    updateHoverPreview();
+    updateCameraAndShake();
+
+    const doomPulse = state.effects.reduce((maxValue, effect) => {
+      if (effect.type !== "doom-blast") {
+        return maxValue;
+      }
+      return Math.max(maxValue, Math.max(0, effect.ttl / 0.58));
+    }, 0);
+    const sceneFlash = Math.min(1, doomPulse * 0.9);
+    sceneState.scene.background.copy(BASE_BACKGROUND).lerp(DOOM_BACKGROUND, sceneFlash * 0.72);
+    if (sceneState.scene.fog) {
+      sceneState.scene.fog.color.copy(BASE_FOG).lerp(DOOM_FOG, sceneFlash * 0.68);
+    }
+    sceneState.renderer.toneMappingExposure = (sceneState.resolvedQuality === "low" ? 0.95 : 1.02) - sceneFlash * 0.24;
+
+    sceneState.renderer.render(sceneState.scene, sceneState.camera);
+  } catch (error) {
+    failScene(error);
+    drawFallback2D();
+  }
 }
 
 /** 切换摄影机在“标准”和“近景”之间切换，返回新的模式字符串。 */

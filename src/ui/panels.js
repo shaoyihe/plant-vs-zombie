@@ -1,7 +1,55 @@
+import { CHAPTERS, formatLevelFullLabel, formatLevelShortLabel } from "../config/levels.js";
 import { PLANTS } from "../config/plants.js";
 import { sound } from "../core/audio.js";
 import { cardList, currentLevel, state } from "../core/state.js";
 import { ui } from "./dom.js";
+
+function getActiveChapterLevelNumber() {
+  if (state.savedRun?.mode === "level") {
+    return state.savedRun.levelIndex + 1;
+  }
+  return state.levelIndex + 1;
+}
+
+function getChapterStatus(chapter) {
+  const chapterSize = chapter.endLevel - chapter.startLevel + 1;
+  const unlockedInChapter = Math.max(0, Math.min(chapterSize, state.unlockedLevel - chapter.startLevel + 1));
+
+  if (unlockedInChapter >= chapterSize) {
+    return "已通关";
+  }
+  if (unlockedInChapter > 0) {
+    return `已解锁 ${unlockedInChapter}/${chapterSize}`;
+  }
+  return "未解锁";
+}
+
+export function renderChapterProgress() {
+  if (!ui.chapterProgress) {
+    return;
+  }
+
+  const activeLevelNumber = getActiveChapterLevelNumber();
+  ui.chapterProgress.innerHTML = CHAPTERS.map((chapter) => {
+    const isUnlocked = state.unlockedLevel >= chapter.startLevel;
+    const isActive = activeLevelNumber >= chapter.startLevel && activeLevelNumber <= chapter.endLevel;
+    const status = getChapterStatus(chapter);
+    const detail = isUnlocked
+      ? `当前范围 ${formatLevelShortLabel(chapter.startLevel - 1)}-${formatLevelShortLabel(chapter.endLevel - 1)}`
+      : `通关 ${formatLevelShortLabel(chapter.startLevel - 2)} 后解锁`;
+    return `
+      <div class="chapter-card${isUnlocked ? " unlocked" : " locked"}${isActive ? " active" : ""}">
+        <div class="chapter-card-top">
+          <strong>第${chapter.id}章</strong>
+          <span>${chapter.startLevel}-${chapter.endLevel}</span>
+        </div>
+        <div class="chapter-card-name">${chapter.name}</div>
+        <div class="chapter-card-status">${status}</div>
+        <div class="chapter-card-meta">${detail}</div>
+      </div>
+    `;
+  }).join("");
+}
 
 /**
  * UI 面板模块：负责所有 HUD 层的渲染和更新。
@@ -36,12 +84,13 @@ function renderSeedPacket(plant, footerLeft, footerRight, includeCooldown = fals
  * 每次选卡发生变化后重新调用以刷新 UI。
  */
 export function renderPrepCards() {
+  renderChapterProgress();
   const level = currentLevel();
   if (state.mode === "endless") {
     ui.prepTitle.textContent = "无尽模式选卡";
     ui.prepDesc.textContent = `${level.name}规则，僵尸会不断增强，尽可能撑更多波次。`;
   } else {
-    ui.prepTitle.textContent = `第 ${level.id} 关选卡`;
+    ui.prepTitle.textContent = `${formatLevelFullLabel(level)} 选卡`;
     ui.prepDesc.textContent = `${level.name}，从当前可用植物中选择最多 5 张卡牌进入战斗。`;
   }
   ui.prepCards.innerHTML = "";

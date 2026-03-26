@@ -1,4 +1,4 @@
-import { LEVELS } from "../config/levels.js";
+import { formatLevelFullLabel, formatLevelShortLabel, LEVELS } from "../config/levels.js";
 import { BOARD_X, BOARD_Y, CELL_H, CELL_W, COLS, HOUSE_LINE_X, ROWS } from "../config/constants.js";
 import { PLANTS } from "../config/plants.js";
 import { ZOMBIES } from "../config/zombies.js";
@@ -17,7 +17,7 @@ import {
 import { saveProgress } from "../core/storage.js";
 import { draw } from "../render/draw.js";
 import { ui } from "../ui/dom.js";
-import { renderCards, renderPrepCards, syncTopButtons, updatePauseCover } from "../ui/panels.js";
+import { renderCards, renderChapterProgress, renderPrepCards, syncTopButtons, updatePauseCover } from "../ui/panels.js";
 
 /**
  * 游戏流程模块：管理关卡宇张、局对准备、进行中局对和返回菜单等项层状态流转。
@@ -373,7 +373,7 @@ export function startLevel(index, mode = state.mode) {
   syncTopButtons();
   renderCards();
   updatePauseCover();
-  ui.levelLabel.textContent = state.mode === "endless" ? "∞" : String(level.id);
+  ui.levelLabel.textContent = state.mode === "endless" ? "∞" : formatLevelShortLabel(level);
   saveProgress({ clearActiveRun: true });
 }
 
@@ -450,7 +450,7 @@ export function resumeSavedRun() {
   syncTopButtons();
   renderCards();
   updatePauseCover();
-  ui.levelLabel.textContent = state.mode === "endless" ? "∞" : String(level.id);
+  ui.levelLabel.textContent = state.mode === "endless" ? "∞" : formatLevelShortLabel(level);
   return true;
 }
 
@@ -471,7 +471,7 @@ export function endLevel(victory, reason) {
   if (state.mode === "endless") {
     ui.resultDesc.textContent = `${reason}，你抵挡到了第 ${state.endless.wave} 波`;
   } else {
-    ui.resultDesc.textContent = `${reason}，击杀 ${state.stats.kills}，用时 ${Math.floor(state.stats.spentSeconds)} 秒`;
+    ui.resultDesc.textContent = `${formatLevelFullLabel(state.levelIndex)}，${reason}，击杀 ${state.stats.kills}，用时 ${Math.floor(state.stats.spentSeconds)} 秒`;
   }
   renderResultStats();
   ui.nextBtn.style.display =
@@ -504,14 +504,15 @@ export function returnToMenu() {
 /** 根据当前存档状态更新菜单上“继续”按鈕的文字和禁用状态。 */
 export function updateContinueButton() {
   ui.continueBtn.disabled = !state.hasSavedGame;
+  renderChapterProgress();
   if (!state.hasSavedGame) {
     ui.continueBtn.textContent = "暂无存档";
     return;
   }
   if (state.savedRun) {
     ui.continueBtn.textContent =
-      state.savedRun.mode === "endless" ? "继续无尽对局" : `继续第 ${state.savedRun.levelIndex + 1} 关对局`;
+      state.savedRun.mode === "endless" ? "继续无尽对局" : `继续${formatLevelFullLabel(state.savedRun.levelIndex)}对局`;
     return;
   }
-  ui.continueBtn.textContent = `继续第 ${getContinueLevelNumber()} 关`;
+  ui.continueBtn.textContent = `继续${formatLevelFullLabel(getContinueLevelNumber() - 1)}`;
 }

@@ -328,7 +328,7 @@ export function updatePlants(dt) {
             const zombieY = BOARD_Y + zombie.row * CELL_H + CELL_H / 2;
             const dist = Math.hypot(zombie.x - plant.x, zombieY - plant.y);
             if (dist <= radius) {
-              applyDamageToZombie(zombie, def.damage);
+              applyDamageToZombie(zombie, def.damage, null, "cherrybomb");
             }
           });
           state.effects.push({ x: plant.x, y: plant.y, ttl: 0.4, type: "boom", radius: radius * 0.7 });
@@ -391,7 +391,7 @@ export function updatePlants(dt) {
             const zombieY = BOARD_Y + zombie.row * CELL_H + CELL_H / 2;
             const dist = Math.hypot(zombie.x - plant.x, zombieY - plant.y);
             if (dist <= radius) {
-              applyDamageToZombie(zombie, def.damage);
+              applyDamageToZombie(zombie, def.damage, null, "doomshroom");
             }
           });
           state.effects.push({ x: plant.x, y: plant.y, ttl: 0.58, type: "doom-blast", radius: radius * 0.86 });
@@ -447,7 +447,7 @@ export function updatePlants(dt) {
             const zombieY = BOARD_Y + zombie.row * CELL_H + CELL_H / 2;
             const dist = Math.hypot(zombie.x - plant.x, zombieY - plant.y);
             if (dist <= radius) {
-              applyDamageToZombie(zombie, def.damage);
+              applyDamageToZombie(zombie, def.damage, null, "potatomine");
             }
           });
           state.effects.push({ x: plant.x, y: plant.y, ttl: 0.34, type: "boom", radius: radius * 0.48 });
@@ -463,7 +463,7 @@ export function updatePlants(dt) {
         if (triggerZombie) {
           plant.action = "attack";
           plant.actionTimer = 0.22;
-          applyDamageToZombie(triggerZombie, def.damage);
+          applyDamageToZombie(triggerZombie, def.damage, null, "squash");
           state.effects.push({ x: triggerZombie.x, y: plant.y, ttl: 0.26, type: "boom", radius: 24 });
           state.plants[row][col] = null;
           sound.beep(150, 0.11, "square", 0.06);
@@ -482,7 +482,7 @@ export function updatePlants(dt) {
           plant.attackTimer = 0;
           plant.action = "attack";
           plant.actionTimer = 0.1;
-          applyDamageToZombie(targetZombie, def.damage);
+          applyDamageToZombie(targetZombie, def.damage, null, "spikeweed");
           state.effects.push({ x: targetZombie.x, y: plant.y + 10, ttl: 0.12, type: "hit" });
           sound.beep(260, 0.03, "triangle", 0.02);
         }
@@ -716,6 +716,14 @@ export function updateZombies(dt) {
         targetPlant.hitFlash = 0.15;
         targetPlant.action = "hurt";
         targetPlant.actionTimer = 0.12;
+        state.effects.push({
+          x: targetPlant.x,
+          y: targetPlant.y,
+          ttl: 0.24,
+          type: "damage-burst",
+          amount: zombie.damage,
+          variant: "plant",
+        });
         sound.beep(220, 0.04, "square", 0.03);
         if (targetPlant.hp <= 0) {
           state.effects.push({

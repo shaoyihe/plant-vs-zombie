@@ -225,11 +225,31 @@ export function spawnProjectile(plant, def, offsetY = 0, slow = false, targetRow
   pooled.slow = slow;
   pooled.slowRatio = def.slow || 1;
   pooled.slowDuration = def.slowDuration || 0;
+  pooled.sourcePlantId = plant.plantId;
   pooled.fire = false;
   pooled.transformedByTorch = false;
   pooled.alive = true;
   state.projectiles.push(pooled);
   state.stats.projectilesFired += 1;
+}
+
+function getHitVariant(projectile, fallbackVariant = "normal") {
+  if (projectile?.fire) {
+    return "fire";
+  }
+  if (projectile?.slow) {
+    return projectile?.sourcePlantId === "snowpea" ? "snowpea" : "ice";
+  }
+  switch (projectile?.sourcePlantId) {
+    case "peashooter":
+      return "peashooter";
+    case "repeater":
+      return "repeater";
+    case "threepeater":
+      return "threepeater";
+    default:
+      return fallbackVariant;
+  }
 }
 
 /** 将子弹标记为无效并归还对象池（最多保留 400 个）。 */
@@ -246,9 +266,10 @@ export function releaseProjectile(projectile) {
  * @param {number} damage - 伤害数値
  * @param {Object|null} projectile - 已命中的子弹实例（可为 null，如爆炸伤害）
  */
-export function applyDamageToZombie(zombie, damage, projectile) {
+export function applyDamageToZombie(zombie, damage, projectile, effectVariant = null) {
   const prevHp = zombie.hp;
   const prevShieldHp = zombie.shieldHp;
+  const originalDamage = damage;
   zombie.hitFlash = 0.14;
   zombie.action = "hurt";
   zombie.actionTimer = 0.12;
@@ -300,6 +321,14 @@ export function applyDamageToZombie(zombie, damage, projectile) {
       type: "hit",
     });
   }
+  state.effects.push({
+    x: zombie.x,
+    y: BOARD_Y + zombie.row * CELL_H + CELL_H / 2,
+    ttl: 0.22,
+    type: "damage-burst",
+    amount: originalDamage,
+    variant: zombie.shieldHp < prevShieldHp ? "shield" : getHitVariant(projectile, effectVariant || "normal"),
+  });
 
   const def = ZOMBIES[zombie.type];
   if (zombie.type === "conehead" && prevHp > zombie.maxHp * 0.55 && zombie.hp <= zombie.maxHp * 0.55 && !zombie.propDropState.coneDropped) {

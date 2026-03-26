@@ -19,6 +19,7 @@ export const ui = {
   pauseCover: document.getElementById("pause-cover"),
   toast: document.getElementById("toast"),
   menuOverlay: document.getElementById("menu-overlay"),
+  chapterProgress: document.getElementById("chapter-progress"),
   prepOverlay: document.getElementById("prep-overlay"),
   prepTitle: document.getElementById("prep-title"),
   prepDesc: document.getElementById("prep-desc"),
